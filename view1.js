@@ -34,19 +34,23 @@ let mapPaths,
 
 // ---------------------------------------------------------------- load + preprocess
 
+// keeps the 5 columns of brazil.csv that the view needs, with clean values:
+// the state code (same as the map features), the type, the conflict written with "vs" and the deaths
 function prepareEvents(rows) {
+    let codeByName = new Map(geoData.features.map(d => [ d.properties.name, d.id ]));
+
     return rows.map(d => {
         return {
             year: +d.year,
-            state: d.state,
-            type: d.type,
-            conflict: d.conflict,
-            deaths: +d.deaths
+            state: codeByName.get(d.adm_1.replace(" state", "")),
+            type: d.type_of_violence === "2" ? "faction" : "civilians",
+            conflict: d.dyad_name.replace(" - ", " vs "),
+            deaths: +d.best
         };
     });
 }
 
-Promise.all([ d3.json("data/states.json"), d3.csv("data/events.csv") ])
+Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
     .then(([ geo, rows ]) => {
         geoData = geo;
         events = prepareEvents(rows);

@@ -1,6 +1,10 @@
 body {
     margin: 0;
     padding: 16px 24px;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
     font-family: system-ui, sans-serif;
     color: #1a1a19;
     background: #fcfcfb;
@@ -12,24 +16,33 @@ header h1 {
 }
 
 header p {
-    margin: 4px 0 16px;
+    margin: 4px 0 12px;
     color: #55554f;
 }
 
+/* the main area takes all the space left between the title and the slider */
 main {
+    flex: 1;
+    min-height: 0;
     display: flex;
     gap: 24px;
-    align-items: flex-start;
 }
 
 #mapArea {
-    flex: 1 1 60%;
-    max-width: 680px;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+#map {
+    flex: 1;
+    min-height: 0;
 }
 
 #map svg {
     width: 100%;
-    height: auto;
+    height: 100%;
 }
 
 .state {
@@ -58,6 +71,7 @@ main {
     display: flex;
     align-items: center;
     gap: 14px;
+    padding-top: 8px;
     font-size: 13px;
     color: #55554f;
 }
@@ -76,8 +90,8 @@ main {
 }
 
 aside {
-    flex: 1 1 40%;
-    max-width: 380px;
+    flex: 0 0 clamp(320px, 30%, 480px);
+    overflow-y: auto;
 }
 
 #typeFilter {
@@ -144,8 +158,7 @@ aside {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 16px;
-    max-width: 1100px;
+    padding-top: 12px;
 }
 
 #controls button {
@@ -154,8 +167,44 @@ aside {
     cursor: pointer;
 }
 
+/* one grey track and one round handle: no colour on the left side, so it does not look like a range */
 #yearSlider {
     flex: 1;
+    height: 20px;
+    background: transparent;
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+}
+
+#yearSlider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 3px;
+    background: #d8d7d2;
+}
+
+#yearSlider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px;
+    height: 20px;
+    margin-top: -7px;
+    border: 2px solid #fcfcfb;
+    border-radius: 50%;
+    background: #1a1a19;
+}
+
+#yearSlider::-moz-range-track {
+    height: 6px;
+    border-radius: 3px;
+    background: #d8d7d2;
+}
+
+#yearSlider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #fcfcfb;
+    border-radius: 50%;
+    background: #1a1a19;
 }
 
 #yearLabel {
@@ -174,8 +223,21 @@ aside {
     pointer-events: none;
 }
 
+/* narrow screens: stack the map and the panel, and let the page scroll */
 @media (max-width: 800px) {
+    body {
+        height: auto;
+    }
+
     main {
         flex-direction: column;
+    }
+
+    #map {
+        height: 70vh;
+    }
+
+    aside {
+        flex: none;
     }
 }

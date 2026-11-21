@@ -17,16 +17,16 @@ Then open http://localhost:8000/view1.html. An internet connection is needed to 
 ## Folders and files
 
 - `view1.html`, `view1.js`, `style.css`: the view.
-- `data/events.csv`: one line per event (year, state, type, conflict, deaths).
+- `data/brazil.csv`: the UCDP GED events, Brazil only.
 - `data/states.json`: simplified state borders.
-- `scripts/prepare_data.py`: creates the two files above (needs `pandas` and `shapely`).
+- `scripts/prepare_states.py`: creates `states.json` from the original borders (needs `shapely`).
 
-To recreate the data files: `python3 scripts/prepare_data.py brazil.csv br_states.json data`
+To recreate it: `python3 scripts/prepare_states.py br_states.json data/states.json`
 
 ## Data and credits
 
 - Events: UCDP Georeferenced Event Dataset (GED) Global, version 26.1, filtered to Brazil. https://ucdp.uu.se/downloads/
-- State borders: https://github.com/giuliano-macedo/geodata-br-states (MIT licence), simplified by `prepare_data.py`.
+- State borders: https://github.com/giuliano-macedo/geodata-br-states (MIT licence), simplified by `prepare_states.py`.
 - d3.js v7, loaded from https://d3js.org/d3.v7.min.js
 - Code style and the map approach (GeoJSON, `d3.geoPath`, `d3.rollup`) follow the D3 lab lessons of the course.
 
