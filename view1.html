@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conflicts in Brazil - View 1</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!--
+        Used for loading the data, the map projection (d3.geoPath), the colour scale
+        and the DOM updates. It uses the global object d3.
+    -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <header>
+        <h1>Conflicts in Brazil</h1>
+        <p>Deaths from organised violence by state. Source: UCDP GED, Brazil events, 1993-2025.</p>
+    </header>
+
+    <main>
+        <section id="mapArea">
+            <div id="map"></div>
+            <div id="legend"></div>
+        </section>
+
+        <aside>
+            <fieldset id="typeFilter">
+                <legend>Type of event</legend>
+                <label><input type="checkbox" value="faction" checked> Faction vs faction</label>
+                <label><input type="checkbox" value="civilians" checked> Attacks on civilians</label>
+            </fieldset>
+
+            <div id="panel">
+                <div class="panelHeader">
+                    <h2 id="panelName"></h2>
+                    <span id="panelYear"></span>
+                </div>
+                <p id="panelNumbers"></p>
+                <h3>Main conflicts</h3>
+                <div id="conflictList"></div>
+                <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil.</p>
+            </div>
+        </aside>
+    </main>
+
+    <section id="controls">
+        <button id="prevButton" aria-label="Previous year">&lsaquo; Prev</button>
+        <button id="playButton" aria-label="Play through the years">Play</button>
+        <button id="nextButton" aria-label="Next year">Next &rsaquo;</button>
+        <span id="minYear"></span>
+        <input id="yearSlider" type="range" step="1" aria-label="Year">
+        <span id="maxYear"></span>
+        <strong id="yearLabel"></strong>
+    </section>
+
+    <div id="tooltip"></div>
+
+    <script src="view1.js"></script>
+</body>
+</html>
