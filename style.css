@@ -448,6 +448,18 @@ aside {
     fill: #e6e5e1;
 }
 
+/* state codes on the map of View 2: grey text with a light halo so the dots do not hide them */
+.outlineLabel {
+    font-size: 10px;
+    text-anchor: middle;
+    fill: #66655f;
+    stroke: #f3f2ef;
+    stroke-width: 2px;
+    paint-order: stroke;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
 .outline.selected {
     fill: #fcfcfb;
     stroke: #1a1a19;

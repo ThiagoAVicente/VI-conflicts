@@ -57,6 +57,7 @@ let simulation,
     hitLayer,
     nodeLayer,
     dotLayer,
+    labelLayer,
     statePaths,
     projection,
     mapZoom,
@@ -438,6 +439,7 @@ function drawPlaceMap() {
     // the states are scaled by the zoom; the dots are not, they only move,
     // so a place keeps the same size (= deaths) at every zoom level
     let stateLayer = svg.append("g");
+    labelLayer = svg.append("g").style("pointer-events", "none");
     dotLayer = svg.append("g");
 
     statePaths = stateLayer.selectAll("path")
@@ -451,11 +453,26 @@ function drawPlaceMap() {
                 : "Click to zoom into " + d.properties.name))
             .on("mouseout", hideTooltip);
 
+    // state codes, only on the states big enough to hold them; like the dots they are
+    // not scaled by the zoom, they only move (and they are hidden once a state is selected)
+    let pathMaker = d3.geoPath().projection(projection);
+
+    labelLayer.selectAll("text")
+        .data(geoData.features.filter(d => pathMaker.area(d) > 500))
+        .join("text")
+            .attr("class", "outlineLabel")
+            .attr("x", d => labelPosition(d)[0])
+            .attr("y", d => labelPosition(d)[1] + 3)
+            .text(d => d.id);
+
     // only used from the code (no mouse wheel or drag), to animate the zoom
     mapZoom = d3.zoom()
         .on("zoom", e => {
             mapTransform = e.transform;
             stateLayer.attr("transform", mapTransform);
+            labelLayer.selectAll("text")
+                .attr("x", d => labelPosition(d)[0])
+                .attr("y", d => labelPosition(d)[1] + 3);
             dotLayer.selectAll("circle")
                 .attr("cx", d => placePosition(d)[0])
                 .attr("cy", d => placePosition(d)[1]);
@@ -465,6 +482,11 @@ function drawPlaceMap() {
 // position of a place on the screen: projected, then moved by the current zoom
 function placePosition(place) {
     return mapTransform.apply(projection([ place.lon, place.lat ]));
+}
+
+// position of the code of a state: the centre of the state, moved by the current zoom
+function labelPosition(state) {
+    return mapTransform.apply(d3.geoPath().projection(projection).centroid(state));
 }
 
 // the zoom that fits the selected state in the map, or the identity for the whole country
@@ -487,6 +509,8 @@ function zoomMap() {
     statePaths
         .classed("selected", d => d.id === selectedState)
         .classed("faded", d => selectedState !== null && d.id !== selectedState);
+
+    labelLayer.style("display", selectedState === null ? null : "none");
 
     d3.select("#placeMap svg").transition("zoom")
         .duration(REDUCED_MOTION ? 0 : 750)
