@@ -847,8 +847,8 @@ function setupVis() {
     setupControls();
     zoomMap();
 
-    // starts with the largest conflict selected, as in the sketch
-    select({ type: "link", key: linkKey("Comando Vermelho", "PCC"), source: "Comando Vermelho", target: "PCC" });
+    // starts with everything selected, in all the years
+    select({ type: "all" });
 
     // the first layout is computed before it is shown, so the page does not open with
     // every group flying into place; later changes are animated
