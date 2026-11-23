@@ -142,6 +142,9 @@ function inSelection(d) {
     if ( selection === null ) {
         return false;
     }
+    if ( selection.type === "all" ) {
+        return true;
+    }
     if ( selection.type === "link" ) {
         return linkKey(d.sideA, d.sideB) === selection.key;
     }
@@ -262,6 +265,9 @@ function isActiveLink(link) {
     if ( selection === null ) {
         return true;
     }
+    if ( selection.type === "all" ) {
+        return true;
+    }
     if ( selection.type === "link" ) {
         return link.key === selection.key;
     }
@@ -271,6 +277,9 @@ function isActiveLink(link) {
 function isSelectedNode(node) {
     if ( selection === null ) {
         return false;
+    }
+    if ( selection.type === "all" ) {
+        return true;
     }
     if ( selection.type === "link" ) {
         return node.id === selection.source || node.id === selection.target;
@@ -581,13 +590,17 @@ function updatePlaceLegend() {
 function updateCaption(list, places) {
     let stateName = selectedState === null ? null : getStateName(selectedState);
     let where = stateName === null ? "" : " in " + stateName;
-    let title = "Click a link (a conflict) or a group in the network to see where it happened, or a state on the map to zoom into it.";
+    let title = "Click a link (a conflict) or a group in the network to see where it happened (or use Select all), or a state on the map to zoom into it.";
     let numbers = "";
 
     if ( selection !== null ) {
-        title = selection.type === "link"
-            ? shortName(selection.source) + " vs " + shortName(selection.target) + where
-            : shortName(selection.id) + " (all its conflicts" + where + ")";
+        if ( selection.type === "all" ) {
+            title = "All conflicts" + where;
+        } else if ( selection.type === "link" ) {
+            title = shortName(selection.source) + " vs " + shortName(selection.target) + where;
+        } else {
+            title = shortName(selection.id) + " (all its conflicts" + where + ")";
+        }
     } else if ( stateName !== null ) {
         title = "All conflicts in " + stateName;
     }
@@ -604,6 +617,9 @@ function updateCaption(list, places) {
     }
 
     d3.select("#captionTitle").text(title).classed("hint", selection === null && stateName === null);
+
+    // the button stays pressed while everything is selected
+    d3.select("#selectAll").attr("aria-pressed", selection !== null && selection.type === "all");
     d3.select("#captionNumbers").text(numbers);
 
     // the records left out, counted for the zoomed state only
@@ -667,7 +683,13 @@ function select(newSelection) {
         && (selection.key || selection.id) === (newSelection.key || newSelection.id);
 
     selection = same ? null : newSelection;
-    jumpToFocusYears();
+
+    // selecting everything keeps the years on the slider; one conflict or group moves it to its years
+    if ( selection !== null && selection.type === "all" ) {
+        updateAll();
+    } else {
+        jumpToFocusYears();
+    }
 }
 
 // zooms into a state (or back to Brazil with null) and filters the network and the map to it;
@@ -811,6 +833,7 @@ function setupControls() {
 
     d3.select("#playButton").on("click", togglePlay);
     d3.select("#zoomOut").on("click", () => selectState(null));
+    d3.select("#selectAll").on("click", () => select({ type: "all" }));
     d3.selectAll("#typeFilter input").on("change", updateAll);
 }
 

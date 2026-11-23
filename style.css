@@ -497,6 +497,11 @@ aside {
     cursor: pointer;
 }
 
+.areaTitle button[aria-pressed="true"] {
+    color: #fcfcfb;
+    background: #1a1a19;
+}
+
 #caption p {
     margin: 4px 0 0;
     font-size: 14px;
