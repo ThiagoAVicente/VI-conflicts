@@ -2,7 +2,10 @@
 
 Visual exploration of organised violence in Brazil (1993-2025), for Information Visualisation 2026/27, University of Aveiro.
 
-Only View 1 is built so far: a map of Brazil coloured by the deaths in each state, with a year slider, a type-of-event filter and a side panel with the details of a state.
+Two views are built so far:
+
+- **View 1** (`view1.html`): a map of Brazil coloured by the deaths in each state, with a year slider, a type-of-event filter and a side panel with the details of a state.
+- **View 2** (`view2.html`): a force-directed network of the armed groups (links are conflicts, dotted links are attacks on civilians, size and width are deaths). Clicking a link or a group draws its events as dots on a map of Brazil (size is deaths, shade is the typical year) and moves the year range to the years it was active. It only uses events with an exact place (`where_prec` 1-3); the 62 records with only a state-level location are left out, with a note under the map.
 
 ## How to run
 
@@ -12,11 +15,13 @@ The page loads its data with `d3.csv` and `d3.json`, so it needs a local server 
 python3 -m http.server
 ```
 
-Then open http://localhost:8000/view1.html. An internet connection is needed to load d3 from its CDN.
+Then open http://localhost:8000/view1.html (the views link to each other). An internet connection is needed to load d3 from its CDN.
 
 ## Folders and files
 
-- `view1.html`, `view1.js`, `style.css`: the view.
+- `view1.html`, `view1.js`: View 1.
+- `view2.html`, `view2.js`: View 2.
+- `style.css`: the styles of both views.
 - `data/brazil.csv`: the UCDP GED events, Brazil only.
 - `data/states.json`: simplified state borders.
 - `scripts/prepare_states.py`: creates `states.json` from the original borders (needs `shapely`).
@@ -29,7 +34,8 @@ To recreate it: `python3 scripts/prepare_states.py br_states.json data/states.js
 - State borders: https://github.com/giuliano-macedo/geodata-br-states (MIT licence), simplified by `prepare_states.py`.
 - d3.js v7, loaded from https://d3js.org/d3.v7.min.js
 - Code style and the map approach (GeoJSON, `d3.geoPath`, `d3.rollup`) follow the D3 lab lessons of the course.
+- The drag of the network nodes follows the usual `d3.drag` + `d3.forceSimulation` pattern from the d3-force documentation.
 
 ## Use of AI
 
-Claude (Anthropic) was used to help write the code of View 1 and the data preparation script. The group is responsible for the content.
+Claude (Anthropic) was used to help write the code of Views 1 and 2 and the data preparation script. The group is responsible for the content.

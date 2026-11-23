@@ -223,6 +223,366 @@ aside {
     pointer-events: none;
 }
 
+/* ---------------------------------------------------------------- shared: links between the views */
+
+/* a full-width bar: the negative margins cancel the padding of the body */
+.navbar {
+    flex: none;
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0 24px;
+    margin: -16px -24px 14px;
+    padding: 0 24px;
+    border-bottom: 1px solid #d8d7d2;
+    background: #f3f2ef;
+}
+
+.navBrand {
+    display: flex;
+    align-items: center;
+    padding: 10px 0;
+    font-size: 14px;
+    font-weight: bold;
+    letter-spacing: 0.02em;
+}
+
+.navbar ul {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+/* each view is a tab: number, name and the question it answers */
+.navbar a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    border-bottom: 3px solid transparent;
+    color: #55554f;
+    font-size: 14px;
+    text-decoration: none;
+}
+
+.navbar a:hover {
+    color: #1a1a19;
+    background: #e6e5e1;
+}
+
+.navbar a:focus-visible {
+    outline: 2px solid #256abf;
+    outline-offset: -2px;
+}
+
+.navbar a[aria-current="page"] {
+    color: #1a1a19;
+    font-weight: bold;
+    border-bottom-color: #1a1a19;
+}
+
+.navNumber {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid #77766f;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.navbar a[aria-current="page"] .navNumber {
+    color: #fcfcfb;
+    background: #1a1a19;
+    border-color: #1a1a19;
+}
+
+.navbar small {
+    color: #77776f;
+    font-size: 12px;
+    font-weight: normal;
+}
+
+
+/* ---------------------------------------------------------------- View 2 */
+
+.headerRow {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+#typeFilter.inline {
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    margin: 4px 0 12px;
+}
+
+.viewArea {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.frame {
+    flex: 1;
+    min-height: 0;
+    border: 1px solid #d8d7d2;
+    border-radius: 6px;
+    /* the zoomed map must not spill outside its frame */
+    overflow: hidden;
+}
+
+.frame svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.legendRow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 18px;
+    padding-top: 8px;
+    font-size: 13px;
+    color: #55554f;
+}
+
+.legendRow span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.legendRow i {
+    width: 16px;
+    height: 12px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.legendLine {
+    stroke: #55554f;
+    stroke-width: 3;
+}
+
+.background {
+    fill: transparent;
+}
+
+.link {
+    stroke: #77766f;
+}
+
+/* attacks on civilians: dotted, as in the sketch */
+.link.civilians,
+.legendLine.civilians {
+    stroke-dasharray: 2 5;
+    stroke-linecap: round;
+}
+
+.link.active {
+    stroke: #1a1a19;
+}
+
+.link.faded {
+    stroke: #c9c8c3;
+}
+
+.hit {
+    stroke: transparent;
+    stroke-width: 14;
+    cursor: pointer;
+}
+
+.node {
+    cursor: grab;
+}
+
+.node circle {
+    fill: #e6e5e1;
+    stroke: #1a1a19;
+    stroke-width: 1.5;
+}
+
+.node.related circle {
+    fill: #9b9a94;
+}
+
+.node.selected circle {
+    fill: #1a1a19;
+    stroke-width: 3;
+}
+
+/* white halo so the labels stay readable over the links */
+.node text {
+    font-size: 11px;
+    paint-order: stroke;
+    stroke: #fcfcfb;
+    stroke-width: 3.5px;
+    stroke-linejoin: round;
+    pointer-events: none;
+}
+
+/* the states are scaled by the zoom: non-scaling-stroke keeps the borders thin */
+.outline {
+    fill: #f3f2ef;
+    stroke: #c9c8c3;
+    stroke-width: 0.8;
+    vector-effect: non-scaling-stroke;
+    cursor: pointer;
+    transition: fill 0.3s;
+}
+
+.outline:hover {
+    fill: #e6e5e1;
+}
+
+.outline.selected {
+    fill: #fcfcfb;
+    stroke: #1a1a19;
+    stroke-width: 2;
+}
+
+.outline.faded {
+    fill: #f8f7f5;
+    stroke: #e3e2de;
+}
+
+.place {
+    fill-opacity: 0.8;
+    stroke: #1a1a19;
+    stroke-width: 0.8;
+}
+
+.areaTitle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 30px;
+    margin-bottom: 6px;
+}
+
+.areaTitle h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.areaTitle button {
+    padding: 4px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#caption p {
+    margin: 4px 0 0;
+    font-size: 14px;
+}
+
+#captionTitle {
+    font-weight: bold;
+    font-size: 16px;
+}
+
+#captionTitle.hint {
+    font-weight: normal;
+}
+
+#captionNote {
+    color: #77776f;
+    font-size: 12px;
+}
+
+/* two range inputs on top of each other: only the handles take the mouse */
+#yearRange {
+    position: relative;
+    flex: 1;
+    height: 20px;
+}
+
+.rangeTrack {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 7px;
+    height: 6px;
+    border-radius: 3px;
+    background: #d8d7d2;
+}
+
+#rangeFill {
+    position: absolute;
+    top: 0;
+    height: 6px;
+    background: #55554f;
+}
+
+#yearRange input {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 20px;
+    margin: 0;
+    background: transparent;
+    pointer-events: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+#yearRange input::-webkit-slider-runnable-track {
+    height: 20px;
+    background: transparent;
+}
+
+#yearRange input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: auto;
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #fcfcfb;
+    border-radius: 50%;
+    background: #1a1a19;
+    cursor: grab;
+}
+
+#yearRange input::-moz-range-track {
+    background: transparent;
+}
+
+#yearRange input::-moz-range-thumb {
+    pointer-events: auto;
+    box-sizing: border-box;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #fcfcfb;
+    border-radius: 50%;
+    background: #1a1a19;
+    cursor: grab;
+}
+
+#controls label {
+    white-space: nowrap;
+    font-size: 14px;
+}
+
+#yearLabel.range {
+    min-width: 96px;
+}
+
+
 /* narrow screens: stack the map and the panel, and let the page scroll */
 @media (max-width: 800px) {
     body {
@@ -235,6 +595,16 @@ aside {
 
     #map {
         height: 70vh;
+    }
+
+    .frame {
+        flex: none;
+        height: 70vh;
+    }
+
+    /* the questions next to the tab names do not fit on a phone */
+    .navbar small {
+        display: none;
     }
 
     aside {

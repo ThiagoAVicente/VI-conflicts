@@ -290,10 +290,11 @@ function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
+        // back to whole years, the thumb snaps to the year on screen (only after playing:
+        // doing it on every call would undo the user's drag before the slider is read)
+        d3.select("#yearSlider").attr("step", 1).property("value", selectedYear);
     }
     d3.select("#playButton").text("Play");
-    // back to whole years, the thumb snaps to the year on screen
-    d3.select("#yearSlider").attr("step", 1).property("value", selectedYear);
 }
 
 function togglePlay() {
@@ -331,8 +332,10 @@ function setupControls() {
         .attr("min", minYear)
         .attr("max", maxYear)
         .on("input", function() {
+            // read the dragged year first: it can be fractional while playing
+            let year = Math.round(+this.value);
             stopPlay();
-            setYear(+this.value);
+            setYear(year);
         });
 
     d3.select("#minYear").text(minYear);
