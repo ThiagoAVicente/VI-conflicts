@@ -5,7 +5,11 @@
 let DEFAULT_YEAR = 2023,
     MAP_WIDTH = 620,
     MAP_HEIGHT = 600,
-    PLAY_SPEED = 800;
+    PLAY_SPEED = 800,
+    TRANSITION_TIME = 500;
+
+// people who asked their system for less motion get the changes instantly
+let REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // Fixed classes (0 | 1-9 | 10-99 | 100-999 | 1000+), one blue hue from light to dark.
 // A fixed scale keeps colours comparable between years, the log-like classes
@@ -99,6 +103,7 @@ function drawMap() {
         .join("path")
             .attr("class", "state")
             .attr("d", d => pathMaker(d))
+            .attr("fill", CLASS_COLORS[0])
             .on("mousemove", showTooltip)
             .on("mouseout", hideTooltip)
             .on("click", (e, d) => handleSelection(d.id));
@@ -110,6 +115,7 @@ function drawMap() {
             .attr("class", "stateLabel")
             .attr("x", d => pathMaker.centroid(d)[0])
             .attr("y", d => pathMaker.centroid(d)[1] + 3)
+            .attr("fill", "#1a1a19")
             .text(d => d.id);
 }
 
@@ -128,14 +134,49 @@ function updateMap() {
         group => ({ deaths: d3.sum(group, d => d.deaths), events: group.length }),
         d => d.state);
 
-    mapPaths
-        .attr("fill", d => colorScale(getDeaths(d.id)))
-        .classed("selected", d => d.id === selectedState);
+    mapPaths.classed("selected", d => d.id === selectedState);
+
+    // each state fades from the colour it shows now to the colour of the new year;
+    // a new year arriving mid-fade interrupts the old fade and starts from the current colour
+    mapPaths.transition("fill")
+        .duration(transitionTime())
+        .ease(d3.easeCubicInOut)
+        .attrTween("fill", function(d) {
+            return interpolateFill(this.getAttribute("fill"), colorScale(getDeaths(d.id)));
+        });
 
     // the selected state goes on top so its border is not hidden by the neighbours
     mapPaths.filter(d => d.id === selectedState).raise();
 
-    mapLabels.attr("fill", d => getDeaths(d.id) >= CLASS_LIMITS[2] ? "#fcfcfb" : "#1a1a19");
+    mapLabels.transition("fill")
+        .duration(transitionTime())
+        .ease(d3.easeCubicInOut)
+        .attr("fill", d => getDeaths(d.id) >= CLASS_LIMITS[2] ? "#fcfcfb" : "#1a1a19");
+}
+
+function transitionTime() {
+    return REDUCED_MOTION ? 0 : TRANSITION_TIME;
+}
+
+// interpolator used to fade a state from one class colour to another
+// TODO(human): choose the colour space of the fade (the RGB line below is a placeholder).
+// from/to are colour strings (from may be mid-fade, e.g. "rgb(120, 140, 165)").
+// Must return a function t (0..1) -> colour string.
+function interpolateFill(from, to) {
+    return d3.interpolateRgb(from, to);
+}
+
+// counts the text of each element from the number it shows now to the new one
+function countTo(transition, getValue, format) {
+    transition.textTween(function(d) {
+        let shown = this.__shown || 0;
+        let counter = d3.interpolateRound(shown, getValue(d));
+
+        return t => {
+            this.__shown = counter(t);
+            return format(this.__shown);
+        };
+    });
 }
 
 function getDeaths(stateCode) {
@@ -156,7 +197,10 @@ function updatePanel() {
 
     d3.select("#panelName").text(name);
     d3.select("#panelYear").text(selectedYear);
-    d3.select("#panelNumbers").text(formatNumber(deaths) + " deaths, " + formatNumber(list.length) + " events");
+    d3.select("#panelDeaths").transition("count").duration(transitionTime())
+        .call(countTo, () => deaths, formatNumber);
+    d3.select("#panelEvents").transition("count").duration(transitionTime())
+        .call(countTo, () => list.length, formatNumber);
 
     // the five conflicts with more deaths
     let conflicts = d3.rollups(list, group => d3.sum(group, d => d.deaths), d => d.conflict)
@@ -173,14 +217,26 @@ function updatePanel() {
             let row = enter.append("div").attr("class", "conflictRow");
             row.append("div").attr("class", "conflictName");
             let bar = row.append("div").attr("class", "conflictBar");
-            bar.append("div");
+            bar.append("div").style("width", "0%");
             bar.append("span");
+            // new conflicts fade in, the ones that stay just resize their bar
+            row.style("opacity", 0)
+                .transition("fade").duration(transitionTime())
+                .style("opacity", 1);
             return row;
         });
 
     rows.select(".conflictName").text(d => d[0]);
-    rows.select(".conflictBar div").style("width", d => widthScale(d[1]) + "%");
-    rows.select(".conflictBar span").text(d => formatNumber(d[1]));
+    // tweens the inline width (always in %) and not the computed one (in px)
+    rows.select(".conflictBar div").transition("width")
+        .duration(transitionTime())
+        .ease(d3.easeCubicInOut)
+        .styleTween("width", function(d) {
+            return d3.interpolateString(this.style.width, widthScale(d[1]) + "%");
+        });
+    rows.select(".conflictBar span").transition("count")
+        .duration(transitionTime())
+        .call(countTo, d => d[1], formatNumber);
     rows.order();
 
     d3.select("#conflictList").selectAll(".empty")
@@ -236,6 +292,8 @@ function stopPlay() {
         playTimer = null;
     }
     d3.select("#playButton").text("Play");
+    // back to whole years, the thumb snaps to the year on screen
+    d3.select("#yearSlider").attr("step", 1).property("value", selectedYear);
 }
 
 function togglePlay() {
@@ -248,14 +306,24 @@ function togglePlay() {
         setYear(minYear);
     }
 
+    // the slider works like a video playhead: it moves continuously (one year every
+    // PLAY_SPEED ms) and the map changes each time it passes a whole year
+    let startYear = selectedYear;
+    let slider = d3.select("#yearSlider").attr("step", "any");
+
     d3.select("#playButton").text("Pause");
-    playTimer = d3.interval(() => {
-        if ( selectedYear >= maxYear ) {
-            stopPlay();
-        } else {
-            setYear(selectedYear + 1);
+    playTimer = d3.timer(elapsed => {
+        let position = Math.min(maxYear, startYear + elapsed / PLAY_SPEED);
+
+        if ( Math.floor(position) !== selectedYear ) {
+            setYear(Math.floor(position));
         }
-    }, PLAY_SPEED);
+        slider.property("value", position);
+
+        if ( position >= maxYear ) {
+            stopPlay();
+        }
+    });
 }
 
 function setupControls() {
