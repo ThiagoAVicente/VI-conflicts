@@ -1,6 +1,9 @@
-// View 1: map of Brazil coloured by the deaths in each state, one year at a time.
+// View 1: maps of Brazil coloured by the deaths and/or the events in each state, for one year,
+// the change between two years or the sum of a range of years.
 // Pipeline: load data -> preprocess -> draw -> interaction.
 // Libraries: d3 v7 (global object d3), loaded in index.html.
+
+import { enableTrackClick } from "./slider.js";
 
 let DEFAULT_YEAR = 2023,
     MAP_WIDTH = 620,
@@ -8,45 +11,55 @@ let DEFAULT_YEAR = 2023,
     PLAY_SPEED = 800,
     TRANSITION_TIME = 500;
 
-// people who asked their system for less motion get the changes instantly
-import { enableTrackClick } from "./slider.js";
+// the bar charts under the details: same size and same x axis, one metric each
+let TREND_WIDTH = 320,
+    TREND_HEIGHT = 100,
+    TREND_MARGIN = { top: 8, right: 12, bottom: 20, left: 30 },
+    TREND_OUT = "#c9c8c3";
 
 // every view looks for its elements inside its own part of the page
 let root = d3.select("#view1");
 
-let REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// What the map shows: the deaths or the number of events of each state. The keys are also the
-// names of the numbers in the state stats. Each one has its own fixed classes (0 | 1-9 | 10-99 ...),
-// because there are far fewer events than deaths, its own classes for a range of years (the numbers
-// are the sum of the period, so they are bigger) and its own limit for the change in compare mode.
-let METRICS = {
-    deaths: {
-        classLimits: [ 1, 10, 100, 1000 ],
+// The two metrics the view can show, alone or together, one map each. Each one has its own hue
+// everywhere in the view (map, conflict bars, charts): blue for deaths, orange for events (a pair
+// that stays apart for colour-blind readers). The map classes are fixed, so colours stay comparable
+// between years, and log-like, so Ceara does not wash out every other state.
+// The event limits are lower: a state has 12 events in a typical year and 144 in a bad one.
+// A range of years adds up more, so it has its own classes, and compare mode its own limit for the change.
+let METRICS = [
+    {
+        key: "deaths",
+        name: "Deaths",
+        unit: "deaths",
+        singular: "death",
+        limits: [ 1, 10, 100, 1000 ],
         classNames: [ "0", "1-9", "10-99", "100-999", "1000+" ],
         rangeLimits: [ 1, 100, 1000, 5000 ],
         rangeNames: [ "0", "1-99", "100-999", "1000-4999", "5000+" ],
         changeLimit: 1000,
-        changeTicks: [ -1000, -100, -10, 0, 10, 100, 1000 ]
+        changeTicks: [ -1000, -100, -10, 0, 10, 100, 1000 ],
+        colors: [ "#e6e5e1", "#9ec5f4", "#5598e7", "#256abf", "#0d366b" ],
+        accent: "#256abf",
+        getValue: group => d3.sum(group, d => d.deaths)
     },
-    events: {
-        classLimits: [ 1, 5, 25, 100 ],
-        classNames: [ "0", "1-4", "5-24", "25-99", "100+" ],
+    {
+        key: "events",
+        name: "Events",
+        unit: "events",
+        singular: "event",
+        limits: [ 1, 5, 20, 100 ],
+        classNames: [ "0", "1-4", "5-19", "20-99", "100+" ],
         rangeLimits: [ 1, 25, 100, 500 ],
         rangeNames: [ "0", "1-24", "25-99", "100-499", "500+" ],
         changeLimit: 100,
-        changeTicks: [ -100, -25, -5, 0, 5, 25, 100 ]
+        changeTicks: [ -100, -25, -5, 0, 5, 25, 100 ],
+        colors: [ "#e6e5e1", "#fdbe85", "#fd8d3c", "#e6550d", "#a63603" ],
+        accent: "#e6550d",
+        getValue: group => group.length
     }
-};
+];
 
-// One blue hue from light to dark. A fixed scale keeps colours comparable between years,
-// the log-like classes stop Ceara from washing out every other state.
-let CLASS_COLORS = [ "#e6e5e1", "#9ec5f4", "#5598e7", "#256abf", "#0d366b" ];
-
-let colorScale = d3.scaleThreshold()
-    .range(CLASS_COLORS);
-
-// Compare mode: the map shows the change between two years, fading from grey (no change)
+// Compare mode: the maps show the change between two years, fading from grey (no change)
 // to blue (fewer) or to red (more). The colour follows the size of the change on a
 // log-like (symlog) scale that is fixed at +-changeLimit of the metric, so two comparisons can be compared.
 let NO_EVENTS_COLOR = "#e6e5e1";
@@ -59,25 +72,34 @@ let decreaseColors = d3.interpolateRgbBasis([ "#c2c2c2", "#519ced", "#0f4a96" ])
     increaseColors = d3.interpolateRgbBasis([ "#c2c2c2", "#ec4647", "#9b1c1f" ]);
 
 // t = 0 is the biggest decrease, 0.5 no change and 1 the biggest increase
-let changeScale = d3.scaleDivergingSymlog(t => t < 0.5 ? decreaseColors(1 - 2 * t) : increaseColors(2 * t - 1))
-    .clamp(true);
+let changeColors = t => t < 0.5 ? decreaseColors(1 - 2 * t) : increaseColors(2 * t - 1);
+
+METRICS.forEach(metric => {
+    metric.colorScale = d3.scaleThreshold().range(metric.colors);
+    metric.changeScale = d3.scaleDivergingSymlog(changeColors)
+        .domain([ -metric.changeLimit, 0, metric.changeLimit ])
+        .clamp(true);
+});
+
+// people who asked their system for less motion get the changes instantly
+let REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let events = [],
     geoData,
     minYear,
     maxYear,
     selectedYear,
-    metric = "deaths",
-    selectedState = null,
-    stateStats = new Map(),
     mode = "single",
     baseYear,
-    statsBase = new Map(),
+    selectedState = null,
+    stateGroups = new Map(),
+    baseGroups = new Map(),
+    yearGroups = new Map(),
     playTimer = null;
 
-let mapPaths,
-    mapLabels,
-    pathMaker;
+let pathMaker,
+    maps = [],
+    trendCharts = [];
 
 
 // ---------------------------------------------------------------- load + preprocess
@@ -108,26 +130,31 @@ export function startView1(geo, rows) {
 
 // ---------------------------------------------------------------- data for the current selection
 
-// chooses what the map shows ("deaths" or "events") and sets the scales to it
-function setMetric(name) {
-    metric = name;
-
-    let limit = METRICS[metric].changeLimit;
-
-    colorScale.domain(getClassLimits());
-    changeScale.domain([ -limit, 0, limit ]);
-
-    d3.select("#subtitle").text((metric === "deaths" ? "Deaths from" : "Events of") + " organised violence by state. Source: UCDP GED, Brazil events, 1993-2025.");
-    d3.select("#map svg").attr("aria-label", "Map of Brazil coloured by the " + metric + " in each state");
-}
-
-function getCheckedTypes() {
+function getCheckedValues(selector) {
     let checked = [];
 
-    root.selectAll(".typeFilter input:checked").each(function() {
+    root.selectAll(selector + " input:checked").each(function() {
         checked.push(this.value);
     });
     return checked;
+}
+
+// the metrics ticked by the user, in the order of METRICS (deaths first)
+function getShownMetrics() {
+    let keys = getCheckedValues("#metricFilter");
+
+    return METRICS.filter(metric => keys.includes(metric.key));
+}
+
+// "both" is for the pieces that only make sense with the two metrics (the comma between them)
+function isShown(key) {
+    let shown = getShownMetrics();
+
+    return key === "both" ? shown.length === METRICS.length : shown.some(metric => metric.key === key);
+}
+
+function getCheckedTypes() {
+    return getCheckedValues(".typeFilter");
 }
 
 // the mode of the slider: "single" (one year), "compare" (the change between two years) or
@@ -151,13 +178,21 @@ function getShownYears() {
     return mode === "range" ? [ getStartYear(), getEndYear() ] : [ getEndYear(), getEndYear() ];
 }
 
-// the classes of the colours: a range of years adds up more deaths than a single year
-function getClassLimits() {
-    return mode === "range" ? METRICS[metric].rangeLimits : METRICS[metric].classLimits;
+// the years marked in the bar charts: the period, the year, or the two compared years
+function isSelectedYear(year) {
+    if ( isCompare() ) {
+        return year === getStartYear() || year === getEndYear();
+    }
+    return year >= getStartYear() && year <= getEndYear();
 }
 
-function getClassNames() {
-    return mode === "range" ? METRICS[metric].rangeNames : METRICS[metric].classNames;
+// the classes of the colours: a range of years adds up more than a single year
+function getClassLimits(metric) {
+    return mode === "range" ? metric.rangeLimits : metric.limits;
+}
+
+function getClassNames(metric) {
+    return mode === "range" ? metric.rangeNames : metric.classNames;
 }
 
 // "2023", "2010-2020" or "2010 vs 2020"
@@ -169,82 +204,112 @@ function getYearLabel() {
     return getStartYear() + (isCompare() ? " vs " : "-") + getEndYear();
 }
 
-// events of some years (the ones on the map by default) and of the checked types (all states)
-function getVisibleEvents([ from, to ] = getShownYears()) {
+// events of the checked types, in every year and every state
+function getTypeEvents() {
     let types = getCheckedTypes();
 
-    return events.filter(d => d.year >= from && d.year <= to && types.includes(d.type));
+    return events.filter(d => types.includes(d.type));
 }
 
-// deaths and events of each state in some years
-function getStateStats(years) {
-    return d3.rollup(getVisibleEvents(years),
-        group => ({ deaths: d3.sum(group, d => d.deaths), events: group.length }),
-        d => d.state);
+// events of some years (the ones on the map by default) and of the checked types (all states)
+function getVisibleEvents([ from, to ] = getShownYears()) {
+    return getTypeEvents().filter(d => d.year >= from && d.year <= to);
+}
+
+// the place of the panel: the selected state, or the whole country
+function inPlace(d) {
+    return selectedState === null || d.state === selectedState;
+}
+
+function getStateValue(metric, stateCode, groups = stateGroups) {
+    return metric.getValue(groups.get(stateCode) || []);
+}
+
+// "1,234 deaths, 56 events" with only the metrics shown
+function describe(group) {
+    return getShownMetrics()
+        .map(metric => withUnit(metric, metric.getValue(group)))
+        .join(", ");
+}
+
+// "1 death", "2 deaths"; in compare mode the change: "+12 deaths", "-1 event"
+function withUnit(metric, value, change = false) {
+    return (change ? formatChange(0, value) : formatNumber(value)) + " " + (Math.abs(value) === 1 ? metric.singular : metric.unit);
 }
 
 
 // ---------------------------------------------------------------- draw
 
-function drawMap() {
-    let svg = d3.select("#map").append("svg")
-        .attr("viewBox", [ 0, 0, MAP_WIDTH, MAP_HEIGHT ])
-        .attr("role", "img")
-        .attr("aria-label", "Map of Brazil coloured by deaths in each state");
-
+// one map per metric, side by side, each with its own legend; the map of a metric that is not shown is hidden
+function drawMaps() {
     let projection = d3.geoMercator()
         .fitSize([ MAP_WIDTH, MAP_HEIGHT ], geoData);
 
     pathMaker = d3.geoPath().projection(projection);
 
-    mapPaths = svg.append("g").selectAll("path")
-        .data(geoData.features)
-        .join("path")
-            .attr("class", "state")
-            .attr("d", d => pathMaker(d))
-            .attr("fill", CLASS_COLORS[0])
-            .on("mousemove", showTooltip)
-            .on("mouseout", hideTooltip)
-            .on("click", (e, d) => handleSelection(d.id));
+    maps = METRICS.map(metric => {
+        let cell = root.select("#map").append("div").attr("class", "mapCell");
 
-    // state codes, only on states big enough to hold them
-    mapLabels = svg.append("g").selectAll("text")
-        .data(geoData.features.filter(d => pathMaker.area(d) > 500))
-        .join("text")
-            .attr("class", "stateLabel")
-            .attr("x", d => pathMaker.centroid(d)[0])
-            .attr("y", d => pathMaker.centroid(d)[1] + 3)
-            .attr("fill", "#1a1a19")
-            .text(d => d.id);
+        let svg = cell.append("svg")
+            .attr("viewBox", [ 0, 0, MAP_WIDTH, MAP_HEIGHT ])
+            .attr("role", "img")
+            .attr("aria-label", "Map of Brazil coloured by the " + metric.unit + " in each state");
+
+        let paths = svg.append("g").selectAll("path")
+            .data(geoData.features)
+            .join("path")
+                .attr("class", "state")
+                .attr("d", d => pathMaker(d))
+                .attr("fill", metric.colors[0])
+                .on("mousemove", showTooltip)
+                .on("mouseout", hideTooltip)
+                .on("click", (e, d) => handleSelection(d.id));
+
+        // state codes, only on states big enough to hold them
+        let labels = svg.append("g").selectAll("text")
+            .data(geoData.features.filter(d => pathMaker.area(d) > 500))
+            .join("text")
+                .attr("class", "stateLabel")
+                .attr("x", d => pathMaker.centroid(d)[0])
+                .attr("y", d => pathMaker.centroid(d)[1] + 3)
+                .attr("fill", "#1a1a19")
+                .text(d => d.id);
+
+        let legend = cell.append("div").attr("class", "mapLegend");
+
+        return { metric, cell, paths, labels, legend };
+    });
 }
 
-// the legend of the colours in use: the deaths classes, or the change between the two years
-function drawLegend() {
+// the legend of the colours in use: the classes of the metric, or the change between the two years
+function drawLegend(map) {
+    let metric = map.metric;
+
     if ( isCompare() ) {
-        drawChangeLegend();
+        drawChangeLegend(map);
         return;
     }
 
     // .text() also removes the old items
-    let items = d3.select("#legend").text(capitalise(metric) + (mode === "range" ? " in the period:" : " in the year:")).selectAll("span")
-        .data(CLASS_COLORS)
+    let items = map.legend.text(metric.name + " in " + getYearLabel() + ":").selectAll("span")
+        .data(metric.colors)
         .join("span");
 
     items.append("i").style("background", d => d);
-    items.append("text").text((d, i) => getClassNames()[i]);
+    items.append("text").text((d, i) => getClassNames(metric)[i]);
 }
 
 // a colour bar from the biggest decrease to the biggest increase, with the changes marked on it
-function drawChangeLegend() {
-    let legend = d3.select("#legend")
-        .text("Change in " + metric + " from " + getStartYear() + " to " + getEndYear() + ":");
+function drawChangeLegend(map) {
+    let metric = map.metric;
+    let legend = map.legend
+        .text("Change in " + metric.unit + " from " + getStartYear() + " to " + getEndYear() + ":");
 
-    let colors = d3.range(11).map(i => changeScale.interpolator()(i / 10));
-    let ticks = METRICS[metric].changeTicks;
+    let colors = d3.range(11).map(i => changeColors(i / 10));
 
     // the same log-like scale as the colours, so every mark sits where its colour is
     let position = d3.scaleSymlog()
-        .domain([ -METRICS[metric].changeLimit, METRICS[metric].changeLimit ])
+        .domain([ -metric.changeLimit, metric.changeLimit ])
         .range([ 0, 100 ]);
 
     let bar = legend.append("span").attr("class", "changeLegend");
@@ -253,7 +318,7 @@ function drawChangeLegend() {
         .attr("class", "changeBar")
         .style("background", "linear-gradient(to right, " + colors.join(", ") + ")");
     bar.selectAll("b")
-        .data(ticks)
+        .data(metric.changeTicks)
         .join("b")
             .style("left", d => position(d) + "%")
             .text(d => d === 0 ? "0" : formatChange(0, d));
@@ -264,41 +329,119 @@ function drawChangeLegend() {
     none.append("text").text("No events in either year");
 }
 
-// colours the map and rebuilds the state numbers for the current year and filter
-function updateMap() {
-    stateStats = getStateStats(getShownYears());
-    statsBase = isCompare() ? getStateStats([ getStartYear(), getStartYear() ]) : new Map();
+// one bar per year for every year of the data: the selected years are in the colour of the
+// metric, the others grey, so the chart shows where the selection sits in the whole history
+function drawTrends() {
+    let years = d3.range(minYear, maxYear + 1);
+    let base = TREND_HEIGHT - TREND_MARGIN.bottom;
 
-    mapPaths.classed("selected", d => d.id === selectedState);
+    let x = d3.scaleBand()
+        .domain(years)
+        .range([ TREND_MARGIN.left, TREND_WIDTH - TREND_MARGIN.right ])
+        .paddingInner(0.25);
 
-    // each state fades from the colour it shows now to the colour of the new year;
-    // a new year arriving mid-fade interrupts the old fade and starts from the current colour
-    mapPaths.transition("fill")
-        .duration(transitionTime())
-        .ease(d3.easeCubicInOut)
-        .attrTween("fill", function(d) {
-            return interpolateFill(this.getAttribute("fill"), getFill(d.id));
-        });
+    trendCharts = METRICS.map(metric => {
+        let block = root.select("#trends").append("div").attr("data-metric", metric.key);
 
-    // the selected state goes on top so its border is not hidden by the neighbours
-    mapPaths.filter(d => d.id === selectedState).raise();
+        block.append("h3").text(metric.name + " per year");
 
-    mapLabels.transition("fill")
-        .duration(transitionTime())
-        .ease(d3.easeCubicInOut)
-        .attr("fill", d => getTextColor(getFill(d.id)));
+        let svg = block.append("div").attr("class", "trendChart").append("svg")
+            .attr("viewBox", [ 0, 0, TREND_WIDTH, TREND_HEIGHT ])
+            .attr("role", "img")
+            .attr("aria-label", "Bar chart of the " + metric.unit + " in each year");
+
+        let y = d3.scaleLinear().range([ base, TREND_MARGIN.top ]);
+
+        let grid = svg.append("g")
+            .attr("class", "trendGrid")
+            .attr("transform", "translate(" + TREND_MARGIN.left + ",0)");
+
+        svg.append("g")
+            .attr("class", "trendAxis")
+            .attr("transform", "translate(0," + base + ")")
+            .call(d3.axisBottom(x)
+                .tickValues(years.filter(year => year % 5 === 0))
+                .tickSize(3)
+                .tickPadding(4));
+
+        let bars = svg.append("g").selectAll("path")
+            .data(years)
+            .join("path")
+                .attr("class", "trendBar")
+                .attr("fill", TREND_OUT)
+                .attr("d", year => barPath(x(year), base, x.bandwidth(), 0));
+
+        // the hover targets are whole columns, much bigger than the thin bars
+        svg.append("g").selectAll("rect")
+            .data(years)
+            .join("rect")
+                .attr("class", "trendHit")
+                .attr("x", year => x(year) - x.step() * x.paddingInner() / 2)
+                .attr("width", x.step())
+                .attr("y", 0)
+                .attr("height", base)
+                .on("mousemove", showTrendTooltip)
+                .on("mouseout", hideTrendTooltip)
+                .on("click", (e, year) => showOneYear(year));
+
+        return { metric, x, y, grid, bars, base };
+    });
+}
+
+// a bar with rounded top corners, standing on the baseline
+function barPath(x, base, width, height) {
+    let r = Math.min(2, width / 2, height),
+        top = base - height;
+
+    return "M" + x + "," + base
+        + "V" + (top + r)
+        + "Q" + x + "," + top + " " + (x + r) + "," + top
+        + "H" + (x + width - r)
+        + "Q" + (x + width) + "," + top + " " + (x + width) + "," + (top + r)
+        + "V" + base + "Z";
+}
+
+// colours every map and rebuilds the state numbers for the current years and filter
+function updateMaps() {
+    stateGroups = d3.group(getVisibleEvents(), d => d.state);
+    baseGroups = isCompare() ? d3.group(getVisibleEvents([ getStartYear(), getStartYear() ]), d => d.state) : new Map();
+
+    maps.forEach(map => {
+        let metric = map.metric;
+
+        metric.colorScale.domain(getClassLimits(metric));
+        drawLegend(map);
+        map.paths.classed("selected", d => d.id === selectedState);
+
+        // each state fades from the colour it shows now to the colour of the new years;
+        // new years arriving mid-fade interrupt the old fade and start from the current colour
+        map.paths.transition("fill")
+            .duration(transitionTime())
+            .ease(d3.easeCubicInOut)
+            .attrTween("fill", function(d) {
+                return interpolateFill(this.getAttribute("fill"), getFill(metric, d.id));
+            });
+
+        // the selected state goes on top so its border is not hidden by the neighbours
+        map.paths.filter(d => d.id === selectedState).raise();
+
+        map.labels.transition("fill")
+            .duration(transitionTime())
+            .ease(d3.easeCubicInOut)
+            .attr("fill", d => getTextColor(getFill(metric, d.id)));
+    });
 }
 
 function transitionTime() {
     return REDUCED_MOTION ? 0 : TRANSITION_TIME;
 }
 
-// interpolator used to fade a state from one class colour to another
-// TODO(human): choose the colour space of the fade (the RGB line below is a placeholder).
-// from/to are colour strings (from may be mid-fade, e.g. "rgb(120, 140, 165)").
-// Must return a function t (0..1) -> colour string.
+// interpolator used to fade a state from one class colour to another.
+// Lab is a perceptual colour space: the in-between colours change lightness evenly, so a fade
+// reads as "more" or "less" deaths (in RGB the middle of a fade looks greyer and darker).
+// Not HCL: the grey of 0 deaths has almost no hue, and HCL would swing through other hues.
 function interpolateFill(from, to) {
-    return d3.interpolateRgb(from, to);
+    return d3.interpolateLab(from, to);
 }
 
 // counts the text of each element from the number it shows now to the new one
@@ -314,25 +457,16 @@ function countTo(transition, getValue, format) {
     });
 }
 
-// the number the map shows (deaths or events) for a state
-function getValue(stateCode, stats = stateStats) {
-    return stats.has(stateCode) ? stats.get(stateCode)[metric] : 0;
-}
-
-function capitalise(text) {
-    return text.charAt(0).toUpperCase() + text.slice(1);
-}
-
-// the colour of a state: its deaths class, or in compare mode the change from the base year
-function getFill(stateCode) {
+// the colour of a state on the map of a metric: its class, or in compare mode the change from the start year
+function getFill(metric, stateCode) {
     if ( !isCompare() ) {
-        return colorScale(getValue(stateCode));
+        return metric.colorScale(getStateValue(metric, stateCode));
     }
 
-    let before = getValue(stateCode, statsBase),
-        after = getValue(stateCode);
+    let before = getStateValue(metric, stateCode, baseGroups),
+        after = getStateValue(metric, stateCode);
 
-    return before === 0 && after === 0 ? NO_EVENTS_COLOR : changeScale(after - before);
+    return before === 0 && after === 0 ? NO_EVENTS_COLOR : metric.changeScale(after - before);
 }
 
 // white text on dark fills, dark text on light ones
@@ -349,103 +483,109 @@ function formatChange(before, after) {
 
 // fills the side panel for the selected state, or for the whole country
 function updatePanel() {
-    let list = getVisibleEvents();
+    let list = getVisibleEvents().filter(inPlace);
     // in compare mode: the events of the start year, to see what changed
-    let baseList = isCompare() ? getVisibleEvents([ getStartYear(), getStartYear() ]) : [];
-    let name = "Brazil";
-
-    if ( selectedState !== null ) {
-        list = list.filter(d => d.state === selectedState);
-        baseList = baseList.filter(d => d.state === selectedState);
-        name = geoData.features.find(d => d.id === selectedState).properties.name;
-    }
-
-    let deaths = d3.sum(list, d => d.deaths),
-        baseDeaths = d3.sum(baseList, d => d.deaths);
-    // the number the map shows, for the same state (or country)
-    let shown = metric === "deaths" ? deaths : list.length,
-        baseShown = metric === "deaths" ? baseDeaths : baseList.length;
+    let baseList = isCompare() ? getVisibleEvents([ getStartYear(), getStartYear() ]).filter(inPlace) : [];
+    let name = selectedState === null
+        ? "Brazil"
+        : geoData.features.find(d => d.id === selectedState).properties.name;
 
     d3.select("#panelName").text(name);
     d3.select("#panelYear").text(mode === "single" ? selectedYear : getStartYear() + (isCompare() ? " vs " : " to ") + getEndYear());
-    d3.select("#conflictTitle").text(isCompare() ? "Conflicts with the biggest change in " + metric
-        : "Conflicts with the most " + metric + (mode === "range" ? " in the period" : ""));
 
     // in compare mode the numbers are the change (+12 deaths, -3 events), and a line gives the two years
+    METRICS.forEach(metric => {
+        let change = metric.getValue(list) - metric.getValue(baseList);
+
+        d3.select(metric.key === "deaths" ? "#panelDeaths" : "#panelEvents")
+            .transition("count").duration(transitionTime())
+            .call(countTo, () => change, value => withUnit(metric, value, isCompare()));
+    });
+
     // d3.format writes the minus sign as a long dash, the "-" of formatChange is used instead
-    let percent = baseShown > 0 ? " (" + d3.format("+.0%")(shown / baseShown - 1).replace("\u2212", "-") + " in " + metric + ")" : "";
-    let format = isCompare() ? d => formatChange(0, d) : formatNumber;
+    let first = getShownMetrics()[0],
+        shown = first.getValue(list),
+        baseShown = first.getValue(baseList);
+    let percent = baseShown > 0 ? " (" + d3.format("+.0%")(shown / baseShown - 1).replace("−", "-") + " in " + first.unit + ")" : "";
 
     d3.select("#panelCompare")
         .style("display", isCompare() ? "block" : "none")
-        .text(getStartYear() + ": " + formatNumber(baseDeaths) + " deaths, " + formatNumber(baseList.length) + " events. "
-            + getEndYear() + ": " + formatNumber(deaths) + " deaths, " + formatNumber(list.length) + " events" + percent);
-    d3.select("#panelDeaths").transition("count").duration(transitionTime())
-        .call(countTo, () => deaths - baseDeaths, format);
-    d3.select("#panelEvents").transition("count").duration(transitionTime())
-        .call(countTo, () => list.length - baseList.length, format);
+        .text(getStartYear() + ": " + describe(baseList) + ". " + getEndYear() + ": " + describe(list) + percent);
 
-    // the five conflicts with more deaths (or events), or in compare mode with the biggest change
-    let value = group => metric === "deaths" ? d3.sum(group, d => d.deaths) : group.length;
-    let conflicts;
+    updateConflicts(list, baseList);
+}
 
-    if ( isCompare() ) {
-        let after = d3.rollup(list, value, d => d.conflict),
-            before = d3.rollup(baseList, value, d => d.conflict);
+// the five main conflicts, ranked by the first metric shown (in compare mode by its biggest change),
+// with one bar per metric shown
+function updateConflicts(list, baseList) {
+    let rankBy = getShownMetrics()[0];
 
-        conflicts = Array.from(new Set([ ...after.keys(), ...before.keys() ]),
-                name => [ name, (after.get(name) || 0) - (before.get(name) || 0) ])
-            .filter(d => d[1] !== 0)
-            .sort((a, b) => d3.descending(Math.abs(a[1]), Math.abs(b[1])))
-            .slice(0, 5);
-    } else {
-        conflicts = d3.rollups(list, value, d => d.conflict)
-            .sort((a, b) => d3.descending(a[1], b[1]))
-            .slice(0, 5);
-    }
+    d3.select("#conflictTitle").text(isCompare() ? "Conflicts with the biggest change in " + rankBy.unit
+        : "Conflicts with the most " + rankBy.unit + (mode === "range" ? " in the period" : ""));
 
-    let widthScale = d3.scaleLinear()
-        .domain([ 0, d3.max(conflicts, d => Math.abs(d[1])) || 1 ])
-        .range([ 0, 100 ]);
+    let after = d3.group(list, d => d.conflict),
+        before = d3.group(baseList, d => d.conflict);
+
+    let conflicts = Array.from(new Set([ ...after.keys(), ...before.keys() ]), name => ({
+            name,
+            values: new Map(METRICS.map(m => [ m.key, m.getValue(after.get(name) || []) - m.getValue(before.get(name) || []) ]))
+        }))
+        // in compare mode, only the conflicts that changed
+        .filter(d => !isCompare() || getShownMetrics().some(m => d.values.get(m.key) !== 0))
+        .sort((a, b) => d3.descending(Math.abs(a.values.get(rankBy.key)), Math.abs(b.values.get(rankBy.key))) || d3.ascending(a.name, b.name))
+        .slice(0, 5);
 
     let rows = d3.select("#conflictList").selectAll(".conflictRow")
-        .data(conflicts, d => d[0])
+        .data(conflicts, d => d.name)
         .join(enter => {
             let row = enter.append("div").attr("class", "conflictRow")
                 .attr("role", "button")
                 .attr("tabindex", 0)
-                .on("click", (e, d) => openConflict(d[0]))
+                .on("click", (e, d) => openConflict(d.name))
                 .on("keydown", (e, d) => {
                     if ( e.key === "Enter" || e.key === " " ) {
                         e.preventDefault();
-                        openConflict(d[0]);
+                        openConflict(d.name);
                     }
                 });
             row.append("div").attr("class", "conflictName");
-            let bar = row.append("div").attr("class", "conflictBar");
-            bar.append("div").style("width", "0%");
-            bar.append("span");
-            // new conflicts fade in, the ones that stay just resize their bar
+            METRICS.forEach(metric => {
+                let bar = row.append("div").attr("class", "conflictBar").attr("data-metric", metric.key);
+                bar.append("div").style("width", "0%");
+                bar.append("span");
+            });
+            // new conflicts fade in, the ones that stay just resize their bars
             row.style("opacity", 0)
                 .transition("fade").duration(transitionTime())
                 .style("opacity", 1);
             return row;
         });
 
-    rows.select(".conflictName").text(d => d[0]);
-    // the bars of the compare mode are red (more) or blue (less); otherwise the colour of the css
-    rows.select(".conflictBar div")
-        .style("background", d => isCompare() ? (d[1] > 0 ? INCREASE_COLOR : DECREASE_COLOR) : null);
-    // tweens the inline width (always in %) and not the computed one (in px)
-    rows.select(".conflictBar div").transition("width")
-        .duration(transitionTime())
-        .ease(d3.easeCubicInOut)
-        .styleTween("width", function(d) {
-            return d3.interpolateString(this.style.width, widthScale(Math.abs(d[1])) + "%");
-        });
-    rows.select(".conflictBar span").transition("count")
-        .duration(transitionTime())
-        .call(countTo, d => d[1], format);
+    rows.select(".conflictName").text(d => d.name);
+
+    // every metric has its own bar scale: the longest bar is the top value of that metric
+    METRICS.forEach(metric => {
+        let value = d => d.values.get(metric.key);
+        let widthScale = d3.scaleLinear()
+            .domain([ 0, d3.max(conflicts, d => Math.abs(value(d))) || 1 ])
+            .range([ 0, 100 ]);
+
+        let bars = rows.select(".conflictBar[data-metric='" + metric.key + "']");
+
+        // the bars of the compare mode are red (more) or blue (less); otherwise the hue of the metric
+        bars.select("div")
+            .style("background", d => isCompare() ? (value(d) > 0 ? INCREASE_COLOR : DECREASE_COLOR) : metric.accent);
+        // tweens the inline width (always in %) and not the computed one (in px)
+        bars.select("div").transition("width")
+            .duration(transitionTime())
+            .ease(d3.easeCubicInOut)
+            .styleTween("width", function(d) {
+                return d3.interpolateString(this.style.width, widthScale(Math.abs(value(d))) + "%");
+            });
+        bars.select("span").transition("count")
+            .duration(transitionTime())
+            .call(countTo, value, v => withUnit(metric, v, isCompare()));
+    });
     rows.order();
 
     d3.select("#conflictList").selectAll(".empty")
@@ -455,14 +595,65 @@ function updatePanel() {
             .text(isCompare() ? "No change between these years." : "No events with these filters.");
 }
 
+// the bar charts: the same place and types as the panel, but every year
+function updateTrends() {
+    yearGroups = d3.group(getTypeEvents().filter(inPlace), d => d.year);
+
+    trendCharts.forEach(chart => {
+        let getValue = year => chart.metric.getValue(yearGroups.get(year) || []);
+
+        chart.y.domain([ 0, d3.max(chart.bars.data(), getValue) || 1 ]).nice(3);
+
+        // light grid lines across the chart, with the numbers on the left
+        chart.grid.transition("axis")
+            .duration(transitionTime())
+            .call(d3.axisLeft(chart.y)
+                .ticks(3)
+                .tickSize(-(TREND_WIDTH - TREND_MARGIN.left - TREND_MARGIN.right))
+                .tickPadding(4)
+                .tickFormat(d3.format("~s")));
+
+        // each bar grows or shrinks from the height it shows now (also when interrupted)
+        chart.bars.transition("size")
+            .duration(transitionTime())
+            .ease(d3.easeCubicInOut)
+            .attrTween("d", function(year) {
+                let height = d3.interpolateNumber(this.__height || 0, chart.base - chart.y(getValue(year)));
+
+                return t => {
+                    this.__height = height(t);
+                    return barPath(chart.x(year), chart.base, chart.x.bandwidth(), this.__height);
+                };
+            });
+
+        chart.bars.transition("fill")
+            .duration(transitionTime())
+            .attr("fill", year => isSelectedYear(year) ? chart.metric.accent : TREND_OUT);
+    });
+}
+
+// hides every map, chart, bar and number of a metric that is not ticked
+function showMetrics() {
+    maps.forEach(map => map.cell.style("display", isShown(map.metric.key) ? null : "none"));
+
+    root.selectAll("[data-metric]").style("display", function() {
+        return isShown(this.dataset.metric) ? null : "none";
+    });
+
+    let subject = isShown("both") ? "Deaths and events of" : isShown("deaths") ? "Deaths from" : "Events of";
+
+    root.select("#subtitle").text(subject + " organised violence by state. Source: UCDP GED, Brazil events, 1993-2025.");
+}
+
 function formatNumber(value) {
     return d3.format(",")(value);
 }
 
 function updateAll() {
-    drawLegend();
-    updateMap();
+    updateMaps();
     updatePanel();
+    updateTrends();
+    showMetrics();
 }
 
 
@@ -489,17 +680,33 @@ function handleSelection(stateCode) {
 }
 
 function showTooltip(e, d) {
-    let stats = stateStats.get(d.id) || { deaths: 0, events: 0 };
-    let text = d.properties.name + ": " + formatNumber(stats.deaths) + " deaths, " + formatNumber(stats.events) + " events";
+    let text = d.properties.name + ", " + getYearLabel() + ": " + describe(stateGroups.get(d.id) || []);
 
     if ( isCompare() ) {
-        let before = getValue(d.id, statsBase),
-            after = getValue(d.id);
+        text = d.properties.name + ": " + getShownMetrics().map(metric => {
+            let before = getStateValue(metric, d.id, baseGroups),
+                after = getStateValue(metric, d.id);
 
-        text = d.properties.name + ": " + formatNumber(before) + " " + metric + " in " + getStartYear() + ", "
-            + formatNumber(after) + " in " + getEndYear() + " (" + formatChange(before, after) + ")";
+            return formatNumber(before) + " " + metric.unit + " in " + getStartYear() + ", "
+                + formatNumber(after) + " in " + getEndYear() + " (" + formatChange(before, after) + ")";
+        }).join("; ");
     }
 
+    moveTooltip(e, text);
+}
+
+// the hovered year is marked in every chart, so the numbers can be read together
+function showTrendTooltip(e, year) {
+    trendCharts.forEach(chart => chart.bars.classed("hovered", d => d === year));
+    moveTooltip(e, year + ": " + describe(yearGroups.get(year) || []));
+}
+
+function hideTrendTooltip() {
+    trendCharts.forEach(chart => chart.bars.classed("hovered", false));
+    hideTooltip();
+}
+
+function moveTooltip(e, text) {
     d3.select("#tooltip")
         .style("display", "block")
         .style("left", (e.clientX + 14) + "px")
@@ -511,12 +718,68 @@ function hideTooltip() {
     d3.select("#tooltip").style("display", "none");
 }
 
+function clampYear(year) {
+    return Math.max(minYear, Math.min(maxYear, year));
+}
+
 function setYear(year) {
-    selectedYear = Math.max(minYear, Math.min(maxYear, year));
-    d3.select("#yearSlider").property("value", selectedYear);
+    selectedYear = clampYear(year);
+    showYears();
+}
+
+// moves the years on screen: the year in single mode, the start and end of the period otherwise
+function setYears(first, last) {
+    if ( mode === "single" ) {
+        selectedYear = clampYear(first);
+    } else {
+        baseYear = clampYear(first);
+        selectedYear = clampYear(last);
+    }
+    showYears();
+}
+
+function showYears() {
+    placeHandles(getStartYear(), getEndYear());
     root.select(".yearLabel").text(getYearLabel());
-    updateFill();
+    // with every year in the range there is nothing to play through
+    root.select(".playButton").property("disabled", mode === "range" && getStartYear() === minYear && getEndYear() === maxYear);
     updateAll();
+}
+
+// a click on a bar of the charts shows only that year
+function showOneYear(year) {
+    stopPlay();
+    selectedYear = clampYear(year);
+
+    if ( mode === "single" ) {
+        setYear(selectedYear);
+        return;
+    }
+    root.select(".modeSwitch input[value='single']").property("checked", true);
+    setMode("single");
+}
+
+// moves the handles and the dark fill between them (fractional years while playing)
+function placeHandles(first, last) {
+    if ( mode === "single" ) {
+        d3.select("#yearSlider").property("value", first);
+        root.select(".rangeFill").style("display", "none");
+        return;
+    }
+
+    // the main handle keeps its side: it is the start if it was on the left of the base one
+    let mainFirst = selectedYear < baseYear;
+
+    d3.select("#yearSlider").property("value", mainFirst ? first : last);
+    d3.select("#baseSlider").property("value", mainFirst ? last : first);
+
+    let position = value => (value - minYear) / (maxYear - minYear);
+
+    // the centre of a 20px handle goes from 10px to (width - 10px)
+    root.select(".rangeFill")
+        .style("display", null)
+        .style("left", "calc(10px + (100% - 20px) * " + position(first) + ")")
+        .style("width", "calc((100% - 20px) * " + (position(last) - position(first)) + ")");
 }
 
 // also used by main.js, when the view is hidden
@@ -524,9 +787,10 @@ export function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
-        // back to whole years, the thumb snaps to the year on screen (only after playing:
+        // back to whole years, the handles snap to the years on screen (only after playing:
         // doing it on every call would undo the user's drag before the slider is read)
-        d3.select("#yearSlider").attr("step", 1).property("value", selectedYear);
+        d3.selectAll("#yearSlider, #baseSlider").attr("step", 1);
+        placeHandles(getStartYear(), getEndYear());
     }
     root.select(".playButton").text("Play");
 }
@@ -537,26 +801,31 @@ function togglePlay() {
         return;
     }
 
-    if ( selectedYear === maxYear ) {
-        setYear(minYear);
+    // in range mode the period keeps its width and slides to the right, like a window over the years
+    // (in single mode the width is 0: one year after the other)
+    let width = getEndYear() - getStartYear();
+
+    if ( getEndYear() === maxYear ) {
+        setYears(minYear, minYear + width);
     }
 
-    // the slider works like a video playhead: it moves continuously (one year every
-    // PLAY_SPEED ms) and the map changes each time it passes a whole year
-    let startYear = selectedYear;
-    let slider = d3.select("#yearSlider").attr("step", "any");
+    // the handles work like a video playhead: they move continuously (one year every
+    // PLAY_SPEED ms) and the views change each time they pass a whole year
+    let firstYear = getStartYear();
+    let lastStart = maxYear - width;
 
+    d3.selectAll("#yearSlider, #baseSlider").attr("step", "any");
     root.select(".playButton").text("Pause");
+
     playTimer = d3.timer(elapsed => {
-        let position = Math.min(maxYear, startYear + elapsed / PLAY_SPEED);
+        let position = Math.min(lastStart, firstYear + elapsed / PLAY_SPEED);
 
-        if ( Math.floor(position) !== selectedYear ) {
-            setYear(Math.floor(position));
+        if ( Math.floor(position) !== getStartYear() ) {
+            setYears(Math.floor(position), Math.floor(position) + width);
         }
-        slider.property("value", position);
-        updateFill(position);
+        placeHandles(position, position + width);
 
-        if ( position >= maxYear ) {
+        if ( position >= lastStart ) {
             stopPlay();
         }
     });
@@ -581,12 +850,15 @@ function setupControls() {
 
     root.selectAll(".typeFilter input").on("change", updateAll);
 
-    setupModes();
-
-    d3.select("#metricSelect").on("change", function() {
-        setMetric(this.value);
+    root.selectAll("#metricFilter input").on("change", function() {
+        // one metric is always shown: unticking the last one ticks it back
+        if ( getShownMetrics().length === 0 ) {
+            this.checked = true;
+        }
         updateAll();
     });
+
+    setupModes();
 }
 
 // the buttons choose the mode of the slider (see isCompare); Compare and Range add a second handle
@@ -596,10 +868,10 @@ function setupModes() {
         .attr("min", minYear)
         .attr("max", maxYear)
         .on("input", function() {
-            baseYear = Math.round(+this.value);
-            root.select(".yearLabel").text(getYearLabel());
-            updateFill();
-            updateAll();
+            let year = Math.round(+this.value);
+            stopPlay();
+            baseYear = clampYear(year);
+            showYears();
         });
 
     root.selectAll(".modeSwitch input").on("change", function() {
@@ -610,47 +882,26 @@ function setupModes() {
 function setMode(newMode) {
     let before = mode;
 
-    mode = newMode;
     stopPlay();
+    mode = newMode;
 
     // the second handle starts next to the first one: the year before (or after, for the first year)
     if ( before === "single" ) {
         baseYear = selectedYear > minYear ? selectedYear - 1 : selectedYear + 1;
     }
 
-    d3.select("#baseSlider").property("hidden", mode === "single").property("value", baseYear);
+    d3.select("#baseSlider").property("hidden", mode === "single");
     root.select(".yearRange").classed("oneHandle", mode === "single");
-    // the player only runs in single mode, its place stays so the slider does not move
-    root.select(".playButton").style("visibility", mode === "single" ? null : "hidden");
-    colorScale.domain(getClassLimits());
+    // the player does not run in compare mode, its place stays so the slider does not move
+    root.select(".playButton").style("visibility", isCompare() ? "hidden" : null);
     setYear(selectedYear);
-}
-
-// the dark fill between the handle of the base year and the one of the year on screen
-// (the playhead can be between two years while playing); only with two handles
-function updateFill(year = selectedYear) {
-    if ( mode === "single" ) {
-        root.select(".rangeFill").style("display", "none");
-        return;
-    }
-
-    let position = value => (value - minYear) / (maxYear - minYear),
-        first = Math.min(baseYear, year),
-        last = Math.max(baseYear, year);
-
-    // the centre of a 20px handle goes from 10px to (width - 10px)
-    root.select(".rangeFill")
-        .style("display", null)
-        .style("left", "calc(10px + (100% - 20px) * " + position(first) + ")")
-        .style("width", "calc((100% - 20px) * " + (position(last) - position(first)) + ")");
 }
 
 function setupVis() {
     [ minYear, maxYear ] = d3.extent(events, d => d.year);
 
-    drawMap();
-    setMetric(metric);
-    drawLegend();
+    drawMaps();
+    drawTrends();
     setupControls();
     setYear(Math.min(DEFAULT_YEAR, maxYear));
 }
