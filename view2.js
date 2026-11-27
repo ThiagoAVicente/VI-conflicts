@@ -775,6 +775,9 @@ function select(newSelection, add = false) {
 
     if ( selection !== null && selection.type === "set" ) {
         compare.setGroups(getSelectedGroups(), true);
+    } else if ( selection !== null && selection.type === "all" ) {
+        // all the groups are selected, the chart compares the ones with most deaths
+        compare.setGroups(compare.topGroups(), true);
     }
 
     // selecting everything keeps the years on the slider; a conflict or group moves it to its years

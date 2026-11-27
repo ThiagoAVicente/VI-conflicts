@@ -209,6 +209,7 @@ export function createCompare(root, source) {
             + ((!range.single && range.first === source.getPeriod()[0] && range.last === source.getPeriod()[1]) ? ""
                 : range.single ? "The vertical line is the year of the slider. " : "The grey band is the years of the slider. ")
             + "An event counts for both of its sides."
+            + (chosen.size >= MAX_GROUPS ? " At most " + MAX_GROUPS + " groups are compared (with Select all, the ones with most deaths)." : "")
             + (scope === "" ? "" : " Only the events in " + scope + "."));
     }
 
@@ -477,5 +478,17 @@ export function createCompare(root, source) {
         }
     }
 
-    return { update, setGroups, canPick: name => groups.includes(name), maxGroups: MAX_GROUPS };
+    // the groups with most deaths in the events of the view (the ones the chart shows when everything is selected)
+    function topGroups() {
+        let deaths = new Map();
+
+        source.getEvents().forEach(d => {
+            [ d.sideA, d.sideB ].forEach(name => deaths.set(name, (deaths.get(name) || 0) + d.deaths));
+        });
+        return groups.filter(name => deaths.has(name))
+            .sort((a, b) => d3.descending(deaths.get(a), deaths.get(b)))
+            .slice(0, MAX_GROUPS);
+    }
+
+    return { update, setGroups, topGroups, canPick: name => groups.includes(name), maxGroups: MAX_GROUPS };
 }
