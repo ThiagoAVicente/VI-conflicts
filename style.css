@@ -175,18 +175,62 @@ aside {
     align-items: center;
     gap: 10px;
     padding-top: 12px;
+    /* the same font and size in every control of both views (buttons use another font unless told) */
+    font-family: inherit;
+    font-size: 14px;
+}
+
+.controls button,
+.modeSwitch span {
+    font: inherit;
 }
 
 .controls button {
     padding: 6px 12px;
-    font-size: 14px;
     cursor: pointer;
 }
 
-/* one grey track and one round handle: no colour on the left side, so it does not look like a range */
-#compareLabel {
-    white-space: nowrap;
-    margin-left: 8px;
+/* the mode of the years (Single, Compare, Range): joined buttons, the chosen one is dark */
+.modeSwitch {
+    display: inline-flex;
+    /* the same width in both views (View 2 has two buttons, View 1 three), so the sliders line up */
+    width: 236px;
+    box-sizing: border-box;
+    border: 1px solid #8f8e88;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.modeSwitch label {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+}
+
+.modeSwitch input {
+    position: absolute;
+    opacity: 0;
+}
+
+.modeSwitch span {
+    display: block;
+    padding: 6px 12px;
+    font-size: 14px;
+}
+
+.modeSwitch label + label span {
+    border-left: 1px solid #8f8e88;
+}
+
+.modeSwitch input:checked + span {
+    background: #1a1a19;
+    color: #fcfcfb;
+}
+
+.modeSwitch input:focus-visible + span {
+    outline: 2px solid #256abf;
+    outline-offset: -2px;
 }
 
 #panelCompare {
@@ -222,7 +266,7 @@ aside {
 }
 
 .yearLabel {
-    min-width: 128px;
+    min-width: 150px;
     text-align: right;
     font-size: 20px;
 }
@@ -488,6 +532,10 @@ aside {
     fill-opacity: 0.8;
     stroke: #1a1a19;
     stroke-width: 0.8;
+    /* the zoom scales the dot around its centre, the border keeps its width */
+    transform-box: fill-box;
+    transform-origin: center;
+    vector-effect: non-scaling-stroke;
 }
 
 .areaTitle {
@@ -539,6 +587,7 @@ aside {
     position: relative;
     flex: 1;
     height: 20px;
+    cursor: pointer;
 }
 
 .rangeTrack {
@@ -555,7 +604,7 @@ aside {
     position: absolute;
     top: 0;
     height: 6px;
-    background: #55554f;
+    background: #1a1a19;
 }
 
 .yearRange input {
@@ -613,10 +662,6 @@ aside {
     font-size: 14px;
 }
 
-.yearLabel.range {
-    min-width: 96px;
-}
-
 
 /* narrow screens: stack the map and the panel, and let the page scroll */
 @media (max-width: 800px) {
@@ -647,13 +692,9 @@ aside {
     }
 }
 
-/* View 1: the fill between the two handles of the compare mode is black, and a single handle
-   can be moved by clicking anywhere on the track (with two handles only the handles take the mouse) */
-.compareRange .rangeFill {
-    background: #1a1a19;
-}
-
-.yearRange:not(.comparing) #yearSlider {
+/* with one handle (Single mode) it can be moved by clicking anywhere on the track;
+   with two handles only the handles take the mouse */
+.yearRange.oneHandle .mainSlider {
     pointer-events: auto;
     cursor: pointer;
 }

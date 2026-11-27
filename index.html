@@ -63,15 +63,17 @@
             </main>
 
             <section class="controls">
-                <button id="prevButton" aria-label="Previous year">&lsaquo; Prev</button>
+                <div class="modeSwitch" role="radiogroup" aria-label="Years shown">
+                    <label><input type="radio" name="mode1" value="single" checked><span>Single</span></label>
+                    <label><input type="radio" name="mode1" value="compare"><span>Compare</span></label>
+                    <label><input type="radio" name="mode1" value="range"><span>Range</span></label>
+                </div>
                 <button aria-label="Play through the years" class="playButton">Play</button>
-                <button id="nextButton" aria-label="Next year">Next &rsaquo;</button>
-                <label id="compareLabel"><input type="checkbox" id="compareToggle"> Compare years</label>
                 <span class="minYear"></span>
-                <div class="yearRange compareRange">
+                <div class="yearRange oneHandle">
                     <div class="rangeTrack"><div class="rangeFill"></div></div>
-                    <input id="baseSlider" type="range" step="1" aria-label="Year to compare with" hidden>
-                    <input id="yearSlider" type="range" step="1" aria-label="Year">
+                    <input id="baseSlider" type="range" step="1" aria-label="Second year" hidden>
+                    <input id="yearSlider" class="mainSlider" type="range" step="1" aria-label="Year">
                 </div>
                 <span class="maxYear"></span>
                 <strong class="yearLabel"></strong>
@@ -125,16 +127,19 @@
             </main>
 
             <section class="controls">
-                <label><input type="checkbox" id="singleYear"> Single year</label>
+                <div class="modeSwitch" role="radiogroup" aria-label="Years shown">
+                    <label><input type="radio" name="mode2" value="single"><span>Single</span></label>
+                    <label><input type="radio" name="mode2" value="range" checked><span>Range</span></label>
+                </div>
                 <button aria-label="Play through the years" class="playButton">Play</button>
                 <span class="minYear"></span>
                 <div class="yearRange">
                     <div class="rangeTrack"><div class="rangeFill"></div></div>
-                    <input id="startSlider" type="range" step="1" aria-label="First year">
+                    <input id="startSlider" class="mainSlider" type="range" step="1" aria-label="First year">
                     <input id="endSlider" type="range" step="1" aria-label="Last year">
                 </div>
                 <span class="maxYear"></span>
-                <strong class="yearLabel range"></strong>
+                <strong class="yearLabel"></strong>
             </section>
 
     

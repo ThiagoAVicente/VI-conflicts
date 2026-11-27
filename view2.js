@@ -11,6 +11,8 @@ let NET_WIDTH = 640,
     TRANSITION_TIME = 500;
 
 // people who asked their system for less motion get the changes instantly
+import { enableTrackClick } from "./slider.js";
+
 // every view looks for its elements inside its own part of the page
 let root = d3.select("#view2");
 
@@ -28,12 +30,11 @@ let SHORT_NAMES = new Map([ [ "Comando Vermelho", "CV" ] ]);
 // with the same blues as View 1
 let YEAR_COLORS = [ "#9ec5f4", "#5598e7", "#256abf", "#0d366b" ];
 
-// fixed size for the places (Fortaleza, the largest, has about 1,500 deaths),
-// so the dots of two conflicts can be compared
+// size of the places: the area of the dot is the number of deaths and nothing else, so
+// the dots of any two selections can be compared (Fortaleza, the largest, has about 1,500 deaths)
 let placeRadius = d3.scaleSqrt()
     .domain([ 0, 1500 ])
-    .range([ 3, 30 ])
-    .clamp(true);
+    .range([ 0, 30 ]);
 
 // the furthest the map zooms in, and the empty margin left around the zoomed state
 let MAX_ZOOM = 10,
@@ -444,8 +445,8 @@ function drawPlaceMap() {
         .attr("height", MAP_HEIGHT)
         .on("click", () => selectState(null));
 
-    // the states are scaled by the zoom; the dots are not, they only move,
-    // so a place keeps the same size (= deaths) at every zoom level
+    // the states are scaled by the zoom; the dots only move and grow a little (see getDotScale),
+    // so they are not stretched like the borders
     let stateLayer = svg.append("g");
     labelLayer = svg.append("g").style("pointer-events", "none");
     dotLayer = svg.append("g");
@@ -483,8 +484,15 @@ function drawPlaceMap() {
                 .attr("y", d => labelPosition(d)[1] + 3);
             dotLayer.selectAll("circle")
                 .attr("cx", d => placePosition(d)[0])
-                .attr("cy", d => placePosition(d)[1]);
+                .attr("cy", d => placePosition(d)[1])
+                .style("transform", "scale(" + getDotScale() + ")");
         });
+}
+
+// how much bigger the dots are when the map is zoomed in: they grow with the square root of the zoom,
+// so they follow the map without covering each other (the size is still the deaths at every zoom level)
+function getDotScale() {
+    return Math.sqrt(mapTransform.k);
 }
 
 // position of a place on the screen: projected, then moved by the current zoom
@@ -555,28 +563,23 @@ function updatePlaceMap() {
                 }
             })
             .order()
+            .style("transform", "scale(" + getDotScale() + ")")
         .transition("size").duration(transitionTime())
             .attr("r", d => placeRadius(d.deaths))
             .attr("fill", d => getYearColor(d.typicalYear));
 
-    updatePlaceLegend();
+    updatePlaceLegend(places);
     updateCaption(list, places);
 }
 
-function updatePlaceLegend() {
+function updatePlaceLegend(places) {
     let legend = d3.select("#placeLegend").html("");
-    let sizes = legend.append("span");
-    let svg = sizes.append("svg").attr("width", 90).attr("height", 34);
+    // no sample dots: the size has no classes, the area is the deaths. The biggest dot on the map is named instead
+    let biggest = d3.greatest(places, d => d.deaths);
 
-    [ 1, 100, 1000 ].forEach((deaths, i) => {
-        svg.append("circle")
-            .attr("class", "place")
-            .attr("cx", [ 6, 24, 62 ][i])
-            .attr("cy", 17)
-            .attr("r", placeRadius(deaths) * (i === 2 ? 0.6 : 1))
-            .attr("fill", "#e6e5e1");
-    });
-    sizes.append("text").text("deaths per place (1, 100, 1000)");
+    legend.append("span").append("text").text("dot area = deaths" + (selectedState !== null ? " (dots grow with the zoom)" : "") + (biggest
+        ? " (biggest here: " + biggest.place + ", " + formatNumber(biggest.deaths) + ")"
+        : ""));
 
     if ( startYear !== endYear ) {
         let years = legend.append("span");
@@ -673,7 +676,6 @@ function jumpToFocusYears() {
 
     stopPlay();
     singleYear = d3.min(years) === d3.max(years);
-    d3.select("#singleYear").property("checked", singleYear);
     setYears(d3.min(years), d3.max(years));
 }
 
@@ -698,9 +700,9 @@ function select(newSelection) {
 function selectState(stateCode) {
     selectedState = selectedState === stateCode ? null : stateCode;
 
-    // zooming in starts with all the conflicts of the state on the map; a click in the
-    // network then narrows it. Zooming out keeps the selection made inside the state
-    if ( selectedState !== null ) {
+    // the selected conflict or group stays selected when zooming in, unless it has no
+    // events in that state (then the map would be empty): it goes back to all the conflicts there
+    if ( selectedState !== null && selection !== null && selection.type !== "all" && getFocusEvents().length === 0 ) {
         selection = null;
     }
 
@@ -736,6 +738,13 @@ function setYears(first, last) {
     updateAll();
 }
 
+// the mode buttons (Single or Range) follow the state, which also changes by itself when something is selected
+function updateModeSwitch() {
+    root.selectAll(".modeSwitch input").property("checked", function() {
+        return (this.value === "single") === singleYear;
+    });
+}
+
 // moves both handles, the dark fill between them and the label
 function updateSliders() {
     let position = year => (year - minYear) / (maxYear - minYear);
@@ -755,7 +764,9 @@ function updateSliders() {
     d3.select("#startSlider").style("z-index", startYear === maxYear ? 2 : null);
 
     root.select(".yearLabel").text(formatYears([ startYear, endYear ]));
-    root.select(".playButton").style("display", singleYear ? null : "none");
+    root.select(".yearRange").classed("oneHandle", singleYear);
+    root.select(".playButton").style("visibility", singleYear ? null : "hidden");
+    updateModeSwitch();
 }
 
 // also used by main.js, when the view is hidden
@@ -819,10 +830,11 @@ function setupControls() {
 
     root.select(".minYear").text(minYear);
     root.select(".maxYear").text(maxYear);
+    enableTrackClick(root.select(".yearRange").node(), minYear, maxYear);
 
-    d3.select("#singleYear").on("change", function() {
+    root.selectAll(".modeSwitch input").on("change", function() {
         stopPlay();
-        singleYear = this.checked;
+        singleYear = this.value === "single";
 
         if ( singleYear ) {
             setYears(startYear, startYear);
@@ -851,6 +863,7 @@ function setupVis() {
 
     // starts with everything selected, in all the years
     select({ type: "all" });
+    updateSliders();
 
     // the first layout is computed before it is shown, so the page does not open with
     // every group flying into place; later changes are animated
