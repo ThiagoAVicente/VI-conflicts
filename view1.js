@@ -4,7 +4,7 @@
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
 import { enableTrackClick } from "./slider.js";
-import { createStateCompare } from "./statecompare.js";
+import { createStateCompare, STATE_COLORS, MAX_STATES } from "./statecompare.js";
 
 let DEFAULT_YEAR = 2023,
     MAP_WIDTH = 620,
@@ -92,9 +92,9 @@ let events = [],
     selectedYear,
     mode = "single",
     baseYear,
-    selectedState = null,
-    // the second state of the comparison (Ctrl+click), next to the selected one
-    comparedState = null,
+    // the states picked on the map (Ctrl+click adds one), each with a colour for the comparison chart
+    selectedStates = [],
+    stateColors = new Map(),
     stateGroups = new Map(),
     baseGroups = new Map(),
     yearGroups = new Map(),
@@ -222,7 +222,7 @@ function getVisibleEvents([ from, to ] = getShownYears()) {
 
 // the place of the panel: the selected state, or the whole country
 function inPlace(d) {
-    return selectedState === null || d.state === selectedState;
+    return selectedStates.length === 0 || selectedStates.includes(d.state);
 }
 
 function getStateValue(metric, stateCode, groups = stateGroups) {
@@ -415,9 +415,9 @@ function updateMaps() {
 
         metric.colorScale.domain(getClassLimits(metric));
         drawLegend(map);
+        // with two or more states the border has the colour of the line of the state in the comparison
         map.paths.classed("selected", d => isStateSelected(d.id))
-            .classed("stateA", d => comparedState !== null && d.id === selectedState)
-            .classed("stateB", d => d.id === comparedState);
+            .style("stroke", d => selectedStates.length >= 2 && isStateSelected(d.id) ? STATE_COLORS[stateColors.get(d.id)] : null);
 
         // each state fades from the colour it shows now to the colour of the new years;
         // new years arriving mid-fade interrupt the old fade and start from the current colour
@@ -492,11 +492,23 @@ function updatePanel() {
     let list = getVisibleEvents().filter(inPlace);
     // in compare mode: the events of the start year, to see what changed
     let baseList = isCompare() ? getVisibleEvents([ getStartYear(), getStartYear() ]).filter(inPlace) : [];
-    let name = selectedState === null
-        ? "Brazil"
-        : geoData.features.find(d => d.id === selectedState).properties.name;
+    let name = selectedStates.length === 0 ? "Brazil"
+        : selectedStates.length <= 2 ? selectedStates.map(getStateName).join(" and ")
+        : selectedStates.length + " states";
 
     d3.select("#panelName").text(name);
+
+    // with three states or more the title only has the number: the names go in a line, with the colour of their line
+    let names = d3.select("#panelStates").property("hidden", selectedStates.length <= 2).text("");
+
+    if ( selectedStates.length > 2 ) {
+        names.selectAll("span")
+            .data(selectedStates)
+            .join("span")
+                .attr("class", "panelState")
+                .style("border-left-color", d => STATE_COLORS[stateColors.get(d)])
+                .text(getStateName);
+    }
     d3.select("#panelYear").text(mode === "single" ? selectedYear : getStartYear() + (isCompare() ? " vs " : " to ") + getEndYear());
 
     // in compare mode the numbers are the change (+12 deaths, -3 events), and a line gives the two years
@@ -660,7 +672,7 @@ function updateAll() {
     updatePanel();
     updateTrends();
     showMetrics();
-    stateCompare.update(comparedState === null ? [] : [ selectedState, comparedState ]);
+    stateCompare.update(selectedStates);
 }
 
 
@@ -680,28 +692,38 @@ function openConflict(conflict) {
 }
 
 function isStateSelected(stateCode) {
-    return stateCode === selectedState || stateCode === comparedState;
+    return selectedStates.includes(stateCode);
+}
+
+function getStateName(stateCode) {
+    return geoData.features.find(d => d.id === stateCode).properties.name;
 }
 
 // a click selects one state (clicking the selected state again goes back to the whole country).
-// With Ctrl (add = true) a second state is added to be compared with the first one, or taken out
+// With Ctrl (add = true) the state is added to the selection, or taken out of it: the details add up
+// the states, and the chart under the slider compares them
 function handleSelection(stateCode, add = false) {
     if ( add ) {
-        if ( stateCode === selectedState ) {
-            selectedState = comparedState;
-            comparedState = null;
-        } else if ( stateCode === comparedState ) {
-            comparedState = null;
-        } else if ( selectedState === null ) {
-            selectedState = stateCode;
-        } else {
-            comparedState = stateCode;
+        if ( selectedStates.includes(stateCode) ) {
+            selectedStates = selectedStates.filter(d => d !== stateCode);
+            stateColors.delete(stateCode);
+        } else if ( selectedStates.length < MAX_STATES ) {
+            selectedStates = [ ...selectedStates, stateCode ];
+            // the first colour that no other selected state has
+            let used = Array.from(stateColors.values());
+
+            stateColors.set(stateCode, d3.range(MAX_STATES).find(slot => !used.includes(slot)));
         }
     } else {
-        selectedState = selectedState === stateCode && comparedState === null ? null : stateCode;
-        comparedState = null;
+        let only = selectedStates.length === 1 && selectedStates[0] === stateCode;
+
+        selectedStates = only ? [] : [ stateCode ];
+        stateColors.clear();
+        if ( !only ) {
+            stateColors.set(stateCode, 0);
+        }
     }
-    d3.select("#panelHint").style("display", selectedState === null ? "block" : "none");
+    d3.select("#panelHint").style("display", selectedStates.length === 0 ? "block" : "none");
     updateAll();
 }
 
@@ -781,7 +803,7 @@ function showOneYear(year) {
         setYear(selectedYear);
         return;
     }
-    root.select(".modeSwitch input[value='single']").property("checked", true);
+    root.select(".controls .modeSwitch input[value='single']").property("checked", true);
     setMode("single");
 }
 
@@ -900,7 +922,7 @@ function setupModes() {
             showYears();
         });
 
-    root.selectAll(".modeSwitch input").on("change", function() {
+    root.selectAll(".controls .modeSwitch input").on("change", function() {
         setMode(this.value);
     });
 }
@@ -935,10 +957,11 @@ function setupVis() {
         getYears: () => [ minYear, maxYear ],
         getShownYears: getShownYears,
         getShownMetrics: getShownMetrics,
-        getName: code => geoData.features.find(d => d.id === code).properties.name,
+        getName: getStateName,
         formatNumber: formatNumber,
         moveTooltip: moveTooltip,
         hideTooltip: hideTooltip,
+        getColor: code => STATE_COLORS[stateColors.get(code)],
         onRemove: code => handleSelection(code, true)
     });
     setupControls();

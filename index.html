@@ -53,6 +53,7 @@
                             <h2 id="panelName"></h2>
                             <span id="panelYear"></span>
                         </div>
+                        <p id="panelStates" hidden></p>
                         <p id="panelNumbers"><span id="panelDeaths" data-metric="deaths">0 deaths</span><span data-metric="both">, </span><span id="panelEvents" data-metric="events">0 events</span></p>
                         <p id="panelCompare"></p>
                         <h3 id="conflictTitle">Main conflicts</h3>
@@ -62,9 +63,7 @@
                         <div id="trends"></div>
                         <p class="trendNote"><i class="metricSwatch deaths" data-metric="deaths"></i><i class="metricSwatch events" data-metric="events"></i> the selected years. Click a bar to see only that year.</p>
 
-                        <div id="stateCompare" hidden></div>
-
-                        <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil. Click a conflict to see it in the network.</p>
+                        <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil. Ctrl+click adds more states to compare. Click a conflict to see it in the network.</p>
                     </div>
                 </aside>
             </main>
@@ -84,6 +83,20 @@
                 </div>
                 <span class="maxYear"></span>
                 <strong class="yearLabel"></strong>
+            </section>
+
+            <!-- the states picked with Ctrl+click, compared year by year -->
+            <section class="stateCompare" hidden>
+                <div class="stateCompareHead">
+                    <h2>Comparing states</h2>
+                    <div class="stateLegend"></div>
+                    <div class="modeSwitch sumSwitch" role="radiogroup" aria-label="Values shown">
+                        <label><input type="radio" name="stateSum" value="added" checked><span>Added up</span></label>
+                        <label><input type="radio" name="stateSum" value="year"><span>Per year</span></label>
+                    </div>
+                </div>
+                <div class="stateCharts"></div>
+                <p class="stateCompareHint"><span class="stateCompareNote"></span> Ctrl+click a state to add it to the comparison or take it out. Click a state to go back to one.</p>
             </section>
 
     

@@ -67,14 +67,6 @@ main {
     stroke-width: 1.5;
 }
 
-.state.selected.stateA {
-    stroke: #6a4ce2;
-}
-
-.state.selected.stateB {
-    stroke: #008a17;
-}
-
 .state.selected {
     stroke: #1a1a19;
     stroke-width: 3;
@@ -1058,98 +1050,136 @@ aside {
     text-align: right;
 }
 
-/* the comparison of two states: replaces the details of one state in the panel */
-#panel.isComparing > :not(#stateCompare) {
+/* the comparison of the selected states, under the slider: the page scrolls when it is shown */
+#view1 {
+    overflow-y: auto;
+}
+
+#view1 > * {
+    flex-shrink: 0;
+}
+
+#view1 main {
+    flex: 1 0 max(480px, calc(100vh - 260px));
+}
+
+.stateCompare {
+    padding: 14px 0 12px;
+}
+
+.stateCompare[hidden] {
     display: none;
 }
 
-.scHead {
+.stateCompareHead {
     display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-}
-
-.scColumns {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-top: 12px;
-}
-
-.scColumn {
-    min-width: 0;
-    padding-top: 8px;
-    border-top: 3px solid;
-}
-
-#panel .scName {
-    display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 8px 24px;
+}
+
+.stateCompareHead h2 {
     margin: 0;
     font-size: 16px;
 }
 
-.scName button {
-    padding: 0 6px;
-    font-size: 16px;
-    line-height: 1.2;
+.stateLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    font-size: 14px;
+}
+
+.stateKey {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.stateKey i {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.stateKey button {
+    padding: 0 4px;
+    font-size: 15px;
+    line-height: 1;
     cursor: pointer;
     border: none;
     background: none;
     color: #55554f;
 }
 
-.scNumbers {
+.stateCharts {
     display: flex;
-    flex-direction: column;
-    margin: 6px 0 0;
-    font-size: 15px;
+    flex-wrap: wrap;
+    gap: 8px 32px;
+    margin-top: 8px;
 }
 
-.scNumbers strong {
-    font-size: 18px;
+.stateChart {
+    flex: 1 1 420px;
+    min-width: 0;
 }
 
-.scColumn h4,
-.scChart h4 {
-    margin: 12px 0 4px;
+.stateChart h3 {
+    margin: 8px 0 2px;
     font-size: 13px;
     color: #55554f;
 }
 
-.scConflicts {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    font-size: 13px;
-}
-
-.scConflicts li {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 2px 0;
-}
-
-.scConflictValue {
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-
-.scEmpty {
-    margin: 0;
-    font-size: 13px;
-    color: #77776f;
-}
-
-.scChart svg {
+.stateChart svg {
     display: block;
-    width: 100%;
 }
 
-.scHint {
-    margin: 16px 0 0;
+.stateCompareHint {
+    margin: 4px 0 0;
     font-size: 13px;
     color: #77776f;
+}
+
+.stateChart .trendGrid text,
+.stateChart .trendAxis text {
+    font-size: 12px;
+}
+
+#panelStates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 14px;
+    margin: 6px 0 0;
+    font-size: 14px;
+}
+
+#panelStates[hidden] {
+    display: none;
+}
+
+.panelState {
+    padding-left: 6px;
+    border-left: 3px solid;
+}
+
+/* the switch on the right, like in View 2 */
+.stateCompareHead {
+    justify-content: space-between;
+}
+
+.stateCompareHead .modeSwitch {
+    width: auto;
+    margin-left: auto;
+}
+
+.stateCompareHead .modeSwitch label {
+    flex: none;
+}
+
+/* the scroll bar of a view is at the edge of the window, and not over the content:
+   the view takes the margins of the page back and keeps them as its own padding */
+#view1,
+#view2 {
+    margin: 0 -24px -16px;
+    padding: 0 24px 16px;
 }
