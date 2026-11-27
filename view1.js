@@ -411,7 +411,16 @@ function updatePanel() {
     let rows = d3.select("#conflictList").selectAll(".conflictRow")
         .data(conflicts, d => d[0])
         .join(enter => {
-            let row = enter.append("div").attr("class", "conflictRow");
+            let row = enter.append("div").attr("class", "conflictRow")
+                .attr("role", "button")
+                .attr("tabindex", 0)
+                .on("click", (e, d) => openConflict(d[0]))
+                .on("keydown", (e, d) => {
+                    if ( e.key === "Enter" || e.key === " " ) {
+                        e.preventDefault();
+                        openConflict(d[0]);
+                    }
+                });
             row.append("div").attr("class", "conflictName");
             let bar = row.append("div").attr("class", "conflictBar");
             bar.append("div").style("width", "0%");
@@ -458,6 +467,19 @@ function updateAll() {
 
 
 // ---------------------------------------------------------------- interaction
+
+// clicking a conflict of the panel asks main.js to open it in View 2, with the years of the slider
+// (the period between the two years in compare mode) and the checked types
+function openConflict(conflict) {
+    window.dispatchEvent(new CustomEvent("openconflict", {
+        detail: {
+            conflict: conflict,
+            first: getStartYear(),
+            last: getEndYear(),
+            types: getCheckedTypes()
+        }
+    }));
+}
 
 function handleSelection(stateCode) {
     // clicking the selected state again goes back to the whole country

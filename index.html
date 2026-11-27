@@ -57,7 +57,7 @@
                         <p id="panelCompare"></p>
                         <h3 id="conflictTitle">Main conflicts</h3>
                         <div id="conflictList"></div>
-                        <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil.</p>
+                        <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil. Click a conflict to see it in the network.</p>
                     </div>
                 </aside>
             </main>
@@ -101,6 +101,10 @@
                 <section id="netArea" class="viewArea">
                     <div class="areaTitle">
                         <h2 id="networkTitle"></h2>
+                        <div class="groupSearch">
+                            <input id="groupSearch" type="search" placeholder="Find a group" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="searchResults" aria-label="Find a group in the network">
+                            <ul id="searchResults" role="listbox" hidden></ul>
+                        </div>
                         <button id="selectAll" aria-pressed="false" aria-label="Select every conflict and group in the network">Select all</button>
                     </div>
                     <div id="network" class="frame"></div>
@@ -140,6 +144,33 @@
                 </div>
                 <span class="maxYear"></span>
                 <strong class="yearLabel"></strong>
+            </section>
+
+            <section class="compare">
+                <div class="compareHead">
+                    <h2>Compare groups over time</h2>
+                    <div class="compareControls">
+                    <div class="modeSwitch metricSwitch" role="radiogroup" aria-label="cmMetric">
+                        <label><input type="radio" name="cmMetric" value="deaths" checked><span>Deaths</span></label>
+                        <label><input type="radio" name="cmMetric" value="events"><span>Events</span></label>
+                    </div>
+                    <div class="modeSwitch sumSwitch" role="radiogroup" aria-label="cmSum">
+                        <label><input type="radio" name="cmSum" value="added" checked><span>Added up</span></label>
+                        <label><input type="radio" name="cmSum" value="year"><span>Per year</span></label>
+                    </div>
+                    </div>
+                </div>
+                <div class="compareBody">
+                    <div class="groupPicker" role="group" aria-label="Groups to compare">
+                        <div class="pickerHead"><span>Pick up to 8 groups</span><button class="clearGroups">Clear</button></div>
+                        <div class="groupList"></div>
+                    </div>
+                    <div class="compareMain">
+                        <div class="compareLegend"></div>
+                        <div class="compareFrame frame"></div>
+                        <p class="compareNote"></p>
+                    </div>
+                </div>
             </section>
 
     

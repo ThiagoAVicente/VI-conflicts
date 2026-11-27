@@ -3,7 +3,7 @@
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
 import { startView1, stopPlay as stopPlay1 } from "./view1.js";
-import { startView2, stopPlay as stopPlay2 } from "./view2.js";
+import { startView2, stopPlay as stopPlay2, showConflict } from "./view2.js";
 
 let VIEWS = [
     { hash: "#map", id: "view1", stopPlay: stopPlay1 },
@@ -32,6 +32,13 @@ function showView() {
 
 showView();
 window.addEventListener("hashchange", showView);
+
+// a conflict clicked in View 1 opens in View 2
+window.addEventListener("openconflict", e => {
+    location.hash = "#network";
+    showView();
+    showConflict(e.detail.conflict, e.detail.first, e.detail.last, e.detail.types);
+});
 
 Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
     .then(([ geo, rows ]) => {
