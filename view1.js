@@ -33,10 +33,6 @@ let METRICS = [
         name: "Deaths",
         unit: "deaths",
         singular: "death",
-        limits: [ 1, 10, 100, 1000 ],
-        classNames: [ "0", "1-9", "10-99", "100-999", "1000+" ],
-        rangeLimits: [ 1, 100, 1000, 5000 ],
-        rangeNames: [ "0", "1-99", "100-999", "1000-4999", "5000+" ],
         changeLimit: 1000,
         changeTicks: [ -1000, -100, -10, 0, 10, 100, 1000 ],
         colors: [ "#e6e5e1", "#9ec5f4", "#5598e7", "#256abf", "#0d366b" ],
@@ -48,10 +44,6 @@ let METRICS = [
         name: "Events",
         unit: "events",
         singular: "event",
-        limits: [ 1, 5, 20, 100 ],
-        classNames: [ "0", "1-4", "5-19", "20-99", "100+" ],
-        rangeLimits: [ 1, 25, 100, 500 ],
-        rangeNames: [ "0", "1-24", "25-99", "100-499", "500+" ],
         changeLimit: 100,
         changeTicks: [ -100, -25, -5, 0, 5, 25, 100 ],
         colors: [ "#e6e5e1", "#fdbe85", "#fd8d3c", "#e6550d", "#a63603" ],
@@ -76,7 +68,9 @@ let decreaseColors = d3.interpolateRgbBasis([ "#c2c2c2", "#519ced", "#0f4a96" ])
 let changeColors = t => t < 0.5 ? decreaseColors(1 - 2 * t) : increaseColors(2 * t - 1);
 
 METRICS.forEach(metric => {
-    metric.colorScale = d3.scaleThreshold().range(metric.colors);
+    // the colour of a state follows its share of the total (the sqrt keeps the small shares visible);
+    // the domain is set in updateMaps
+    metric.shareScale = d3.scaleSequentialSqrt(d3.interpolateRgbBasis(metric.colors.slice(1)));
     metric.changeScale = d3.scaleDivergingSymlog(changeColors)
         .domain([ -metric.changeLimit, 0, metric.changeLimit ])
         .clamp(true);
@@ -190,15 +184,6 @@ function isSelectedYear(year) {
     return year >= getStartYear() && year <= getEndYear();
 }
 
-// the classes of the colours: a range of years adds up more than a single year
-function getClassLimits(metric) {
-    return mode === "range" ? metric.rangeLimits : metric.limits;
-}
-
-function getClassNames(metric) {
-    return mode === "range" ? metric.rangeNames : metric.classNames;
-}
-
 // "2023", "2010-2020" or "2010 vs 2020"
 function getYearLabel() {
     if ( mode === "single" ) {
@@ -294,13 +279,30 @@ function drawLegend(map) {
         return;
     }
 
-    // .text() also removes the old items
-    let items = map.legend.text(metric.name + " in " + getYearLabel() + ":").selectAll("span")
-        .data(metric.colors)
-        .join("span");
+    // the colour goes from light to dark with the share of the total: a bar, with the shares of some marks
+    let legend = map.legend.text(metric.name + " in " + getYearLabel() + ", share of the Brazil total:");
 
-    items.append("i").style("background", d => d);
-    items.append("text").text((d, i) => getClassNames(metric)[i]);
+    let max = metric.maxShare * 100,
+        position = d3.scaleSqrt().domain([ 0, max ]).range([ 0, 100 ]);
+
+    // the marks of the bar; the last one is the largest share, if no other mark is next to it
+    let ticks = [ 0, 1, 5, 10, 25, 50 ].filter(d => d < max * 0.85).concat(max);
+
+    let bar = legend.append("span").attr("class", "changeLegend");
+
+    bar.append("i")
+        .attr("class", "changeBar")
+        .style("background", "linear-gradient(to right, " + d3.range(11).map(i => metric.shareScale(metric.maxShare * (i / 10) * (i / 10))).join(", ") + ")");
+    bar.selectAll("b")
+        .data(ticks)
+        .join("b")
+            .style("left", d => position(d) + "%")
+            .text(d => formatPercent(d));
+
+    let none = legend.append("span");
+
+    none.append("i").style("background", NO_EVENTS_COLOR);
+    none.append("text").text("No " + metric.unit);
 }
 
 // a colour bar from the biggest decrease to the biggest increase, with the changes marked on it
@@ -413,7 +415,10 @@ function updateMaps() {
     maps.forEach(map => {
         let metric = map.metric;
 
-        metric.colorScale.domain(getClassLimits(metric));
+        // the total of the states in the years shown, and the largest share: the colour scale goes up to it
+        metric.total = d3.sum(geoData.features, d => getStateValue(metric, d.id));
+        metric.maxShare = metric.total === 0 ? 1 : d3.max(geoData.features, d => getStateValue(metric, d.id)) / metric.total;
+        metric.shareScale.domain([ 0, metric.maxShare ]);
         drawLegend(map);
         // with two or more states the border has the colour of the line of the state in the comparison
         map.paths.classed("selected", d => isStateSelected(d.id))
@@ -466,7 +471,9 @@ function countTo(transition, getValue, format) {
 // the colour of a state on the map of a metric: its class, or in compare mode the change from the start year
 function getFill(metric, stateCode) {
     if ( !isCompare() ) {
-        return metric.colorScale(getStateValue(metric, stateCode));
+        let value = getStateValue(metric, stateCode);
+
+        return value === 0 ? NO_EVENTS_COLOR : metric.shareScale(value / metric.total);
     }
 
     let before = getStateValue(metric, stateCode, baseGroups),
@@ -478,6 +485,11 @@ function getFill(metric, stateCode) {
 // white text on dark fills, dark text on light ones
 function getTextColor(fill) {
     return d3.lab(fill).l < 52 ? "#fcfcfb" : "#1a1a19";
+}
+
+// "0%", "5%", "12%"; below 10 with a decimal
+function formatPercent(value) {
+    return (value < 10 && value % 1 !== 0 ? d3.format(".1f")(value) : Math.round(value)) + "%";
 }
 
 // "+155", "-562" or "0"
