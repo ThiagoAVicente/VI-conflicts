@@ -99,6 +99,30 @@
                 <p class="stateCompareHint"><span class="stateCompareNote"></span> Ctrl+click a state to add it to the comparison or take it out. Click a state to go back to one.</p>
             </section>
 
+            <!-- every state in every year (heatmap.js): when each state took part, and how it spread -->
+            <section class="heatmap">
+                <div class="heatmapHead">
+                    <div>
+                        <h2>States, year by year</h2>
+                        <p class="heatmapSub">When each state took part in the violence, and how it spread.</p>
+                    </div>
+                    <div class="heatmapLegend"></div>
+                    <div class="heatmapControls">
+                        <div class="modeSwitch" role="radiogroup" aria-label="Metric of the heatmap">
+                            <label><input type="radio" name="hmMetric" value="deaths" checked><span>Deaths</span></label>
+                            <label><input type="radio" name="hmMetric" value="events"><span>Events</span></label>
+                        </div>
+                        <div class="modeSwitch" role="radiogroup" aria-label="Order of the states">
+                            <label><input type="radio" name="hmOrder" value="region" checked><span>Region</span></label>
+                            <label><input type="radio" name="hmOrder" value="first"><span>First year</span></label>
+                            <label><input type="radio" name="hmOrder" value="total"><span>Total</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="heatmapFrame"></div>
+                <p class="heatmapHint">The years of the slider and the selected states (every state when none is selected). The colours are the same in every year and selection (log scale); the bars on the right are the total of each state in these years. Click a cell or a state to select it (Ctrl+click adds it to the comparison) and a year to see only that year.</p>
+            </section>
+
     
     </div>
 
