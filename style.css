@@ -84,6 +84,9 @@ main {
     align-items: center;
     gap: 4px 14px;
     padding-top: 8px;
+    /* the same height in both modes (the compare colour bar is taller), so the page does not move */
+    height: 44px;
+    box-sizing: border-box;
     font-size: 13px;
     color: #55554f;
 }
@@ -106,7 +109,7 @@ aside {
     overflow-y: auto;
 }
 
-#typeFilter,
+.typeFilter,
 #metricFilter {
     display: flex;
     flex-direction: column;
@@ -180,6 +183,12 @@ aside {
 .conflictRow {
     margin-bottom: 8px;
     font-size: 14px;
+    cursor: pointer;
+}
+
+.conflictRow:hover .conflictName,
+.conflictRow:focus-visible .conflictName {
+    text-decoration: underline;
 }
 
 .conflictBar {
@@ -243,22 +252,104 @@ aside {
     color: #77776f;
 }
 
-
-#controls {
+.controls {
     display: flex;
     align-items: center;
     gap: 10px;
     padding-top: 12px;
+    /* the same font and size in every control of both views (buttons use another font unless told) */
+    font-family: inherit;
+    font-size: 14px;
 }
 
-#controls button {
+.controls button,
+.modeSwitch span {
+    font: inherit;
+}
+
+.controls button {
     padding: 6px 12px;
-    font-size: 14px;
     cursor: pointer;
 }
 
-#yearLabel {
-    min-width: 48px;
+/* the mode of the years (Single, Compare, Range): joined buttons, the chosen one is dark */
+.modeSwitch {
+    display: inline-flex;
+    /* the same width in both views (View 2 has two buttons, View 1 three), so the sliders line up */
+    width: 236px;
+    box-sizing: border-box;
+    border: 1px solid #8f8e88;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.modeSwitch label {
+    position: relative;
+    flex: 1;
+    text-align: center;
+    cursor: pointer;
+}
+
+.modeSwitch input {
+    position: absolute;
+    opacity: 0;
+}
+
+.modeSwitch span {
+    display: block;
+    padding: 6px 12px;
+    font-size: 14px;
+}
+
+.modeSwitch label + label span {
+    border-left: 1px solid #8f8e88;
+}
+
+.modeSwitch input:checked + span {
+    background: #1a1a19;
+    color: #fcfcfb;
+}
+
+.modeSwitch input:focus-visible + span {
+    outline: 2px solid #256abf;
+    outline-offset: -2px;
+}
+
+#panelCompare {
+    display: none;
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: #55554f;
+}
+
+/* the colour bar of the compare mode: the marks sit under the bar, centred on their position */
+.mapLegend .changeLegend {
+    position: relative;
+    display: block;
+    width: 260px;
+    height: 34px;
+    margin: 0 24px 0 28px;
+    align-self: flex-start;
+}
+
+.mapLegend .changeBar {
+    display: block;
+    width: 100%;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.mapLegend .changeLegend b {
+    position: absolute;
+    top: 16px;
+    transform: translateX(-50%);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.yearLabel {
+    min-width: 150px;
+    text-align: right;
     font-size: 20px;
 }
 
@@ -369,11 +460,9 @@ aside {
     flex-wrap: wrap;
 }
 
-#typeFilter.inline {
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
-    margin: 4px 0 12px;
+/* the same filter box as View 1, at the right of the title */
+.headerRow .typeFilter {
+    margin: 4px 0 8px;
 }
 
 .viewArea {
@@ -525,6 +614,10 @@ aside {
     fill-opacity: 0.8;
     stroke: #1a1a19;
     stroke-width: 0.8;
+    /* the zoom scales the dot around its centre, the border keeps its width */
+    transform-box: fill-box;
+    transform-origin: center;
+    vector-effect: non-scaling-stroke;
 }
 
 .areaTitle {
@@ -534,6 +627,60 @@ aside {
     gap: 12px;
     min-height: 30px;
     margin-bottom: 6px;
+}
+
+.groupSearch {
+    position: relative;
+    flex: 1;
+    max-width: 240px;
+    margin-left: auto;
+}
+
+.groupSearch input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 13px;
+    border: 1px solid #1a1a19;
+    border-radius: 4px;
+    background: #fcfcfb;
+}
+
+#searchResults {
+    position: absolute;
+    z-index: 10;
+    top: calc(100% + 4px);
+    left: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: 360px;
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+    font-size: 13px;
+    background: #fcfcfb;
+    border: 1px solid #1a1a19;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+#searchResults[hidden] {
+    display: none;
+}
+
+#searchResults li {
+    padding: 5px 10px;
+    cursor: pointer;
+}
+
+#searchResults li.active {
+    background: #e9e8e3;
+}
+
+#searchResults li.none {
+    color: #77776f;
+    cursor: default;
 }
 
 .areaTitle h2 {
@@ -572,10 +719,11 @@ aside {
 }
 
 /* year interval of both views: two range inputs on top of each other, only the handles take the mouse */
-#yearRange {
+.yearRange {
     position: relative;
     flex: 1;
     height: 20px;
+    cursor: pointer;
 }
 
 .rangeTrack {
@@ -588,14 +736,14 @@ aside {
     background: #d8d7d2;
 }
 
-#rangeFill {
+.rangeFill {
     position: absolute;
     top: 0;
     height: 6px;
-    background: #55554f;
+    background: #1a1a19;
 }
 
-#yearRange input {
+.yearRange input {
     position: absolute;
     left: 0;
     top: 0;
@@ -608,12 +756,12 @@ aside {
     appearance: none;
 }
 
-#yearRange input::-webkit-slider-runnable-track {
+.yearRange input::-webkit-slider-runnable-track {
     height: 20px;
     background: transparent;
 }
 
-#yearRange input::-webkit-slider-thumb {
+.yearRange input::-webkit-slider-thumb {
     -webkit-appearance: none;
     pointer-events: auto;
     box-sizing: border-box;
@@ -625,11 +773,16 @@ aside {
     cursor: grab;
 }
 
-#yearRange input::-moz-range-track {
+/* Firefox paints the part before the handle by default, this removes it */
+.yearRange input::-moz-range-progress {
     background: transparent;
 }
 
-#yearRange input::-moz-range-thumb {
+.yearRange input::-moz-range-track {
+    background: transparent;
+}
+
+.yearRange input::-moz-range-thumb {
     pointer-events: auto;
     box-sizing: border-box;
     width: 20px;
@@ -640,13 +793,9 @@ aside {
     cursor: grab;
 }
 
-#controls label {
+.controls label {
     white-space: nowrap;
     font-size: 14px;
-}
-
-#yearLabel.range {
-    min-width: 96px;
 }
 
 
@@ -682,4 +831,221 @@ aside {
     aside {
         flex: none;
     }
+}
+
+/* with one handle (Single mode) it can be moved by clicking anywhere on the track;
+   with two handles only the handles take the mouse */
+.yearRange.oneHandle .mainSlider {
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+/* the two views are in the same page, one at a time; each takes the place the page had before */
+.viewPage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.viewPage[hidden] {
+    display: none;
+}
+
+/* ---------------------------------------------------------------- View 2: the compare chart under the slider */
+
+/* the view is taller than the screen: the network and the map keep a minimum height and the page scrolls */
+#view2 {
+    overflow-y: auto;
+}
+
+#view2 > * {
+    flex-shrink: 0;
+}
+
+#view2 main {
+    flex: 1 0 max(480px, calc(100vh - 260px));
+}
+
+.compare {
+    display: flex;
+    flex-direction: column;
+    height: 340px;
+    padding: 14px 0 12px;
+}
+
+.compareHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px 24px;
+    margin-bottom: 8px;
+}
+
+.compareHead h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.compareControls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+}
+
+.compareControls .modeSwitch {
+    width: auto;
+}
+
+.compareControls .modeSwitch label {
+    flex: none;
+}
+
+.compareBody {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    gap: 20px;
+}
+
+.groupPicker {
+    flex: 0 0 250px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border: 1px solid #d8d7d2;
+    border-radius: 6px;
+}
+
+.pickerHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-weight: bold;
+    border-bottom: 1px solid #e6e5e1;
+}
+
+.pickerHead button {
+    padding: 2px 8px;
+    font: inherit;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.groupList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.pickerItem {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.pickerItem:hover {
+    background: #f0efeb;
+}
+
+.pickerItem input:disabled + .swatch + .pickerName {
+    color: #8f8e88;
+}
+
+/* the colour of the group in the chart, once it is picked */
+.swatch {
+    flex: none;
+    width: 12px;
+    height: 3px;
+    border-radius: 2px;
+    background: transparent;
+}
+
+.pickerName {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pickerItem.isOn .pickerName {
+    font-weight: bold;
+}
+
+.pickerCount {
+    color: #77776f;
+    font-size: 12px;
+}
+
+.compareMain {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.compareLegend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    min-height: 20px;
+    font-size: 13px;
+    color: #55554f;
+}
+
+.compareLegend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lineKey {
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.compareEmpty {
+    margin: 0;
+    padding: 24px;
+    color: #55554f;
+    font-size: 14px;
+}
+
+.compareNote {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #77776f;
+}
+
+/* the tooltip of the chart: value first, then the name, a short line of the colour as key */
+.tipTitle {
+    margin-bottom: 3px;
+    color: #c9c8c2;
+}
+
+.tipRow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.5;
+}
+
+.tipKey {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.tipRow strong {
+    min-width: 40px;
+    text-align: right;
 }

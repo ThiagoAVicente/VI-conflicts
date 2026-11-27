@@ -1,7 +1,7 @@
 // View 2: network of the armed groups (who fought whom) next to a map of the places
 // of the selected conflict or group (where). Clicking a link or a group fills the map.
 // Pipeline: load data -> preprocess -> draw -> interaction.
-// Libraries: d3 v7 (global object d3), loaded in view2.html.
+// Libraries: d3 v7 (global object d3), loaded in index.html.
 
 let NET_WIDTH = 640,
     NET_HEIGHT = 520,
@@ -11,6 +11,12 @@ let NET_WIDTH = 640,
     TRANSITION_TIME = 500;
 
 // people who asked their system for less motion get the changes instantly
+import { enableTrackClick } from "./slider.js";
+import { createCompare } from "./compare.js";
+
+// every view looks for its elements inside its own part of the page
+let root = d3.select("#view2");
+
 let REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // UCDP where_prec: 1-3 means the event has a municipality, 4 or more means only the state
@@ -25,12 +31,11 @@ let SHORT_NAMES = new Map([ [ "Comando Vermelho", "CV" ] ]);
 // with the same blues as View 1
 let YEAR_COLORS = [ "#9ec5f4", "#5598e7", "#256abf", "#0d366b" ];
 
-// fixed size for the places (Fortaleza, the largest, has about 1,500 deaths),
-// so the dots of two conflicts can be compared
+// size of the places: the area of the dot is the number of deaths and nothing else, so
+// the dots of any two selections can be compared (Fortaleza, the largest, has about 1,500 deaths)
 let placeRadius = d3.scaleSqrt()
     .domain([ 0, 1500 ])
-    .range([ 3, 30 ])
-    .clamp(true);
+    .range([ 0, 30 ]);
 
 // the furthest the map zooms in, and the empty margin left around the zoomed state
 let MAX_ZOOM = 10,
@@ -51,6 +56,9 @@ let events = [],
 // the node objects are kept between updates, so a group keeps its place in the layout
 // when the filters remove it and bring it back
 let nodeById = new Map();
+
+// the chart under the slider (see compare.js)
+let compare = null;
 
 let simulation,
     linkLayer,
@@ -88,19 +96,15 @@ function prepareEvents(rows) {
     });
 }
 
-Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
-    .then(([ geo, rows ]) => {
-        geoData = geo;
+// called by main.js when the data is loaded
+export function startView2(geo, rows) {
+    geoData = geo;
 
-        let all = prepareEvents(rows);
-        events = all.filter(d => d.precise);
-        impreciseEvents = all.filter(d => !d.precise);
-        setupVis();
-    })
-    .catch(err => {
-        console.log(err);
-        d3.select("#network").text("Could not load the data. Start a local server in this folder (python3 -m http.server) and open http://localhost:8000/view2.html");
-    });
+    let all = prepareEvents(rows);
+    events = all.filter(d => d.precise);
+    impreciseEvents = all.filter(d => !d.precise);
+    setupVis();
+}
 
 
 // ---------------------------------------------------------------- data for the current selection
@@ -108,7 +112,7 @@ Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
 function getCheckedTypes() {
     let checked = [];
 
-    d3.selectAll("#typeFilter input:checked").each(function() {
+    root.selectAll(".typeFilter input:checked").each(function() {
         checked.push(this.value);
     });
     return checked;
@@ -145,10 +149,9 @@ function inSelection(d) {
     if ( selection.type === "all" ) {
         return true;
     }
-    if ( selection.type === "link" ) {
-        return linkKey(d.sideA, d.sideB) === selection.key;
-    }
-    return d.sideA === selection.id || d.sideB === selection.id;
+    return selection.items.some(item => item.type === "link"
+        ? linkKey(d.sideA, d.sideB) === item.key
+        : d.sideA === item.id || d.sideB === item.id);
 }
 
 // links: one per conflict pair, nodes: one per group, both with the deaths in the range
@@ -268,10 +271,9 @@ function isActiveLink(link) {
     if ( selection.type === "all" ) {
         return true;
     }
-    if ( selection.type === "link" ) {
-        return link.key === selection.key;
-    }
-    return link.source.id === selection.id || link.target.id === selection.id;
+    return selection.items.some(item => item.type === "link"
+        ? link.key === item.key
+        : link.source.id === item.id || link.target.id === item.id);
 }
 
 function isSelectedNode(node) {
@@ -281,15 +283,14 @@ function isSelectedNode(node) {
     if ( selection.type === "all" ) {
         return true;
     }
-    if ( selection.type === "link" ) {
-        return node.id === selection.source || node.id === selection.target;
-    }
-    return node.id === selection.id;
+    return selection.items.some(item => item.type === "link"
+        ? node.id === item.source || node.id === item.target
+        : node.id === item.id);
 }
 
 // groups that fought the selected group
 function isRelatedNode(node, links) {
-    if ( selection === null || selection.type !== "node" || node.id === selection.id ) {
+    if ( selection === null || selection.type !== "set" || !selection.items.some(d => d.type === "node") || isSelectedNode(node) ) {
         return false;
     }
     return links.some(l => isActiveLink(l) && (l.source.id === node.id || l.target.id === node.id));
@@ -374,7 +375,7 @@ function updateNetwork() {
         .data(links, d => d.key)
         .join("line")
             .attr("class", "hit")
-            .on("click", (e, d) => select({ type: "link", key: d.key, source: d.source.id, target: d.target.id }))
+            .on("click", (e, d) => select({ type: "link", key: d.key, source: d.source.id, target: d.target.id }, e.ctrlKey || e.metaKey || e.shiftKey))
             .on("mousemove", (e, d) => showTooltip(e, shortName(d.source.id) + " vs " + shortName(d.target.id) + ": "
                 + formatNumber(d.deaths) + " deaths, " + formatNumber(d.events) + " events"))
             .on("mouseout", hideTooltip);
@@ -385,7 +386,7 @@ function updateNetwork() {
             let g = enter.append("g")
                 .attr("class", "node")
                 .call(dragNode)
-                .on("click", (e, d) => select({ type: "node", id: d.id }))
+                .on("click", (e, d) => select({ type: "node", id: d.id }, e.ctrlKey || e.metaKey || e.shiftKey))
                 .on("mousemove", (e, d) => showTooltip(e, d.id + ": " + formatNumber(d.deaths) + " deaths in "
                     + d.conflicts + (d.conflicts === 1 ? " conflict" : " conflicts")))
                 .on("mouseout", hideTooltip);
@@ -445,8 +446,8 @@ function drawPlaceMap() {
         .attr("height", MAP_HEIGHT)
         .on("click", () => selectState(null));
 
-    // the states are scaled by the zoom; the dots are not, they only move,
-    // so a place keeps the same size (= deaths) at every zoom level
+    // the states are scaled by the zoom; the dots only move and grow a little (see getDotScale),
+    // so they are not stretched like the borders
     let stateLayer = svg.append("g");
     labelLayer = svg.append("g").style("pointer-events", "none");
     dotLayer = svg.append("g");
@@ -484,8 +485,15 @@ function drawPlaceMap() {
                 .attr("y", d => labelPosition(d)[1] + 3);
             dotLayer.selectAll("circle")
                 .attr("cx", d => placePosition(d)[0])
-                .attr("cy", d => placePosition(d)[1]);
+                .attr("cy", d => placePosition(d)[1])
+                .style("transform", "scale(" + getDotScale() + ")");
         });
+}
+
+// how much bigger the dots are when the map is zoomed in: they grow with the square root of the zoom,
+// so they follow the map without covering each other (the size is still the deaths at every zoom level)
+function getDotScale() {
+    return Math.sqrt(mapTransform.k);
 }
 
 // position of a place on the screen: projected, then moved by the current zoom
@@ -556,28 +564,23 @@ function updatePlaceMap() {
                 }
             })
             .order()
+            .style("transform", "scale(" + getDotScale() + ")")
         .transition("size").duration(transitionTime())
             .attr("r", d => placeRadius(d.deaths))
             .attr("fill", d => getYearColor(d.typicalYear));
 
-    updatePlaceLegend();
+    updatePlaceLegend(places);
     updateCaption(list, places);
 }
 
-function updatePlaceLegend() {
+function updatePlaceLegend(places) {
     let legend = d3.select("#placeLegend").html("");
-    let sizes = legend.append("span");
-    let svg = sizes.append("svg").attr("width", 90).attr("height", 34);
+    // no sample dots: the size has no classes, the area is the deaths. The biggest dot on the map is named instead
+    let biggest = d3.greatest(places, d => d.deaths);
 
-    [ 1, 100, 1000 ].forEach((deaths, i) => {
-        svg.append("circle")
-            .attr("class", "place")
-            .attr("cx", [ 6, 24, 62 ][i])
-            .attr("cy", 17)
-            .attr("r", placeRadius(deaths) * (i === 2 ? 0.6 : 1))
-            .attr("fill", "#e6e5e1");
-    });
-    sizes.append("text").text("deaths per place (1, 100, 1000)");
+    legend.append("span").append("text").text("dot area = deaths" + (selectedState !== null ? " (dots grow with the zoom)" : "") + (biggest
+        ? " (biggest here: " + biggest.place + ", " + formatNumber(biggest.deaths) + ")"
+        : ""));
 
     if ( startYear !== endYear ) {
         let years = legend.append("span");
@@ -587,19 +590,26 @@ function updatePlaceLegend() {
     }
 }
 
+// the name of a selected group or conflict
+function describeItem(item) {
+    return item.type === "link" ? shortName(item.source) + " vs " + shortName(item.target) : shortName(item.id);
+}
+
 function updateCaption(list, places) {
     let stateName = selectedState === null ? null : getStateName(selectedState);
     let where = stateName === null ? "" : " in " + stateName;
-    let title = "Click a link (a conflict) or a group in the network to see where it happened (or use Select all), or a state on the map to zoom into it.";
+    let title = "Click a link (a conflict) or a group in the network to see where it happened (Ctrl+click to select several, or use Select all), or a state on the map to zoom into it.";
     let numbers = "";
 
     if ( selection !== null ) {
         if ( selection.type === "all" ) {
             title = "All conflicts" + where;
-        } else if ( selection.type === "link" ) {
-            title = shortName(selection.source) + " vs " + shortName(selection.target) + where;
+        } else if ( selection.items.length > 1 ) {
+            title = selection.items.map(describeItem).join(", ") + where;
+        } else if ( selection.items[0].type === "link" ) {
+            title = describeItem(selection.items[0]) + where;
         } else {
-            title = shortName(selection.id) + " (all its conflicts" + where + ")";
+            title = shortName(selection.items[0].id) + " (all its conflicts" + where + ")";
         }
     } else if ( stateName !== null ) {
         title = "All conflicts in " + stateName;
@@ -647,6 +657,10 @@ function formatYears([ first, last ]) {
 function updateAll() {
     updateNetwork();
     updatePlaceMap();
+
+    if ( compare !== null ) {
+        compare.update();
+    }
 }
 
 
@@ -661,30 +675,109 @@ function getFocusEvents() {
 }
 
 // moves the slider to the years of the events in focus, so selecting a conflict or
-// zooming into a state always shows the whole period it was active
+// zooming into a state always shows the whole period it was active.
+// In single year mode the year stays where it is (and the player keeps going): the user is
+// watching the selection year by year, and selecting something must not take that mode away
 function jumpToFocusYears() {
     let years = getFocusEvents().map(d => d.year);
 
-    if ( years.length === 0 ) {
+    if ( singleYear || years.length === 0 ) {
         updateAll();
         return;
     }
 
     stopPlay();
     singleYear = d3.min(years) === d3.max(years);
-    d3.select("#singleYear").property("checked", singleYear);
     setYears(d3.min(years), d3.max(years));
 }
 
-function select(newSelection) {
-    // clicking the selected link or group again clears the selection, like in View 1
-    let same = selection !== null && newSelection !== null
-        && selection.type === newSelection.type
-        && (selection.key || selection.id) === (newSelection.key || newSelection.id);
+// called by main.js when a conflict is clicked in View 1: selects it here, in the same years
+// (one year: single mode; otherwise range) and with the same types, in the whole country
+export function showConflict(conflict, first, last, types) {
+    let event = events.find(d => linkKey(d.sideA, d.sideB) === conflict);
 
-    selection = same ? null : newSelection;
+    stopPlay();
+    hideTooltip();
+    root.selectAll(".typeFilter input").property("checked", function() {
+        return types.includes(this.value);
+    });
 
-    // selecting everything keeps the years on the slider; one conflict or group moves it to its years
+    if ( selectedState !== null ) {
+        selectedState = null;
+        zoomMap();
+    }
+
+    selection = event === undefined ? { type: "all" }
+        : { type: "set", items: [ { type: "link", key: conflict, source: event.sideA, target: event.sideB } ] };
+
+    // a conflict that only has imprecise places (not drawn here) cannot be shown: all the conflicts then
+    if ( selection.type === "set" && getFocusEvents().length === 0 ) {
+        selection = { type: "all" };
+    }
+
+    if ( selection.type === "set" ) {
+        compare.setGroups(getSelectedGroups(), true);
+    }
+
+    singleYear = first === last;
+    updateModeSwitch();
+    setYears(first, last);
+}
+
+// the groups of the selection (a conflict is two groups), to show them in the chart under the slider
+function getSelectedGroups() {
+    if ( selection === null || selection.type !== "set" ) {
+        return [];
+    }
+
+    let names = [];
+
+    selection.items.forEach(item => {
+        (item.type === "link" ? [ item.source, item.target ] : [ item.id ]).forEach(name => {
+            if ( !names.includes(name) ) {
+                names.push(name);
+            }
+        });
+    });
+    return names;
+}
+
+function sameItem(a, b) {
+    return a.type === b.type && (a.key || a.id) === (b.key || b.id);
+}
+
+// a click selects only that conflict or group (clicking it again clears it, like in View 1);
+// with Ctrl (add = true) it is added to the selection, or taken out of it
+function select(newSelection, add = false) {
+    if ( newSelection === null || newSelection.type === "all" ) {
+        let same = newSelection !== null && selection !== null && selection.type === "all";
+
+        selection = same ? null : newSelection;
+    } else {
+        let items = selection !== null && selection.type === "set" ? selection.items : [],
+            found = items.findIndex(d => sameItem(d, newSelection));
+
+        if ( add ) {
+            items = found >= 0 ? items.filter((d, i) => i !== found) : [ ...items, newSelection ];
+        } else {
+            items = found >= 0 && items.length === 1 ? [] : [ newSelection ];
+        }
+
+        // the chart compares a few groups only: the last one is not added
+        let tooMany = new Set(items.flatMap(d => d.type === "link" ? [ d.source, d.target ] : [ d.id ])
+            .filter(name => compare.canPick(name))).size > compare.maxGroups;
+
+        if ( tooMany ) {
+            return;
+        }
+        selection = items.length === 0 ? null : { type: "set", items: items };
+    }
+
+    if ( selection !== null && selection.type === "set" ) {
+        compare.setGroups(getSelectedGroups(), true);
+    }
+
+    // selecting everything keeps the years on the slider; a conflict or group moves it to its years
     if ( selection !== null && selection.type === "all" ) {
         updateAll();
     } else {
@@ -692,14 +785,57 @@ function select(newSelection) {
     }
 }
 
+// the groups were picked in the chart: the network selects them too (the conflicts of the selection
+// whose two groups stay picked are kept; a conflict that loses one group becomes the other group)
+function pickGroups(names) {
+    let items = [];
+
+    if ( selection !== null && selection.type === "set" ) {
+        selection.items.forEach(item => {
+            if ( item.type === "node" ) {
+                items.push(item);
+            } else if ( names.includes(item.source) && names.includes(item.target) ) {
+                items.push(item);
+            } else if ( names.includes(item.source) ) {
+                items.push({ type: "node", id: item.source });
+            } else if ( names.includes(item.target) ) {
+                items.push({ type: "node", id: item.target });
+            }
+        });
+        // the groups the chart does not compare (the civilians) are not touched by the chart
+        items = items.filter(d => d.type !== "node" || names.includes(d.id) || !compare.canPick(d.id));
+    }
+
+    names.forEach(name => {
+        if ( !items.some(d => sameItem(d, { type: "node", id: name })) ) {
+            items.push({ type: "node", id: name });
+        }
+    });
+
+    // unique, and a group already inside a selected conflict is not added twice
+    let covered = new Set();
+    items = items.filter(d => {
+        let key = d.type + ":" + (d.key || d.id);
+
+        if ( covered.has(key) ) {
+            return false;
+        }
+        covered.add(key);
+        return true;
+    });
+
+    selection = items.length === 0 ? { type: "all" } : { type: "set", items: items };
+    updateAll();
+}
+
 // zooms into a state (or back to Brazil with null) and filters the network and the map to it;
 // clicking the zoomed state again goes back, like in View 1
 function selectState(stateCode) {
     selectedState = selectedState === stateCode ? null : stateCode;
 
-    // zooming in starts with all the conflicts of the state on the map; a click in the
-    // network then narrows it. Zooming out keeps the selection made inside the state
-    if ( selectedState !== null ) {
+    // the selected conflict or group stays selected when zooming in, unless it has no
+    // events in that state (then the map would be empty): it goes back to all the conflicts there
+    if ( selectedState !== null && selection !== null && selection.type !== "all" && getFocusEvents().length === 0 ) {
         selection = null;
     }
 
@@ -735,6 +871,13 @@ function setYears(first, last) {
     updateAll();
 }
 
+// the mode buttons (Single or Range) follow the state, which also changes by itself when something is selected
+function updateModeSwitch() {
+    root.selectAll(".controls .modeSwitch input").property("checked", function() {
+        return (this.value === "single") === singleYear;
+    });
+}
+
 // moves both handles, the dark fill between them and the label
 function updateSliders() {
     let position = year => (year - minYear) / (maxYear - minYear);
@@ -745,7 +888,7 @@ function updateSliders() {
     d3.select("#endSlider").property("value", endYear).style("display", singleYear ? "none" : null);
 
     // the centre of a 20px handle goes from 10px to (width - 10px)
-    d3.select("#rangeFill")
+    root.select(".rangeFill")
         .style("display", singleYear ? "none" : null)
         .style("left", "calc(10px + (100% - 20px) * " + p0 + ")")
         .style("width", "calc((100% - 20px) * " + (p1 - p0) + ")");
@@ -753,11 +896,14 @@ function updateSliders() {
     // when the handles meet at the end, the first one goes on top so it can still be dragged back
     d3.select("#startSlider").style("z-index", startYear === maxYear ? 2 : null);
 
-    d3.select("#yearLabel").text(formatYears([ startYear, endYear ]));
-    d3.select("#playButton").style("display", singleYear ? null : "none");
+    root.select(".yearLabel").text(formatYears([ startYear, endYear ]));
+    root.select(".yearRange").classed("oneHandle", singleYear);
+    root.select(".playButton").style("visibility", singleYear ? null : "hidden");
+    updateModeSwitch();
 }
 
-function stopPlay() {
+// also used by main.js, when the view is hidden
+export function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
@@ -765,7 +911,7 @@ function stopPlay() {
         // the user's drag before the slider is read)
         d3.select("#startSlider").attr("step", 1).property("value", startYear);
     }
-    d3.select("#playButton").text("Play");
+    root.select(".playButton").text("Play");
 }
 
 // same player as View 1: the handle moves continuously and the views change at each whole year
@@ -782,7 +928,7 @@ function togglePlay() {
     let firstYear = startYear;
     let slider = d3.select("#startSlider").attr("step", "any");
 
-    d3.select("#playButton").text("Pause");
+    root.select(".playButton").text("Pause");
     playTimer = d3.timer(elapsed => {
         let position = Math.min(maxYear, firstYear + elapsed / PLAY_SPEED);
 
@@ -815,12 +961,13 @@ function setupControls() {
         this.value = endYear;
     });
 
-    d3.select("#minYear").text(minYear);
-    d3.select("#maxYear").text(maxYear);
+    root.select(".minYear").text(minYear);
+    root.select(".maxYear").text(maxYear);
+    enableTrackClick(root.select(".yearRange").node(), minYear, maxYear);
 
-    d3.select("#singleYear").on("change", function() {
+    root.selectAll(".controls .modeSwitch input").on("change", function() {
         stopPlay();
-        singleYear = this.checked;
+        singleYear = this.value === "single";
 
         if ( singleYear ) {
             setYears(startYear, startYear);
@@ -831,10 +978,103 @@ function setupControls() {
         }
     });
 
-    d3.select("#playButton").on("click", togglePlay);
+    root.select(".playButton").on("click", togglePlay);
     d3.select("#zoomOut").on("click", () => selectState(null));
     d3.select("#selectAll").on("click", () => select({ type: "all" }));
-    d3.selectAll("#typeFilter input").on("change", updateAll);
+    root.selectAll(".typeFilter input").on("change", updateAll);
+}
+
+// ---------------------------------------------------------------- search
+
+// the box above the network: typing lists the groups with that text in the name (the ones with
+// more deaths first); a click or Enter selects the group, like clicking its circle
+function setupSearch() {
+    let input = d3.select("#groupSearch"),
+        list = d3.select("#searchResults"),
+        active = -1,
+        matches = [];
+
+    let deathsByGroup = new Map();
+
+    events.forEach(d => {
+        [ d.sideA, d.sideB ].forEach(name => deathsByGroup.set(name, (deathsByGroup.get(name) || 0) + d.deaths));
+    });
+
+    // lower case and without accents, so "ceara" finds "Ceará"
+    let simple = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+    let groups = Array.from(deathsByGroup, d => ({ name: d[0], deaths: d[1], text: simple(d[0] + " " + shortName(d[0])) }))
+        .sort((a, b) => d3.descending(a.deaths, b.deaths));
+
+    function close() {
+        list.property("hidden", true);
+        input.attr("aria-expanded", "false");
+        active = -1;
+    }
+
+    function choose(name) {
+        input.property("value", "");
+        close();
+        input.node().blur();
+
+        let already = selection !== null && selection.type === "set" && selection.items.length === 1
+            && selection.items[0].type === "node" && selection.items[0].id === name;
+
+        if ( !already ) {
+            select({ type: "node", id: name });
+        }
+    }
+
+    function showMatches() {
+        let query = simple(input.property("value").trim());
+
+        matches = query === "" ? [] : groups.filter(d => d.text.includes(query)).slice(0, 8);
+        active = matches.length > 0 ? 0 : -1;
+        draw();
+    }
+
+    function draw() {
+        list.selectAll("li")
+            .data(matches, d => d.name)
+            .join("li")
+                .attr("role", "option")
+                .classed("active", (d, i) => i === active)
+                .text(d => shortName(d.name) + (shortName(d.name) !== d.name ? " (" + d.name + ")" : "") + " · " + formatNumber(d.deaths) + " deaths")
+                .on("mousedown", (e, d) => {
+                    // before the input loses the focus
+                    e.preventDefault();
+                    choose(d.name);
+                });
+
+        let empty = input.property("value").trim() !== "" && matches.length === 0;
+
+        list.selectAll("li.none")
+            .data(empty ? [ 1 ] : [])
+            .join("li")
+                .attr("class", "none")
+                .text("No group with that name");
+
+        list.property("hidden", matches.length === 0 && !empty);
+        input.attr("aria-expanded", String(matches.length > 0));
+    }
+
+    input.on("input", showMatches)
+        .on("focus", showMatches)
+        .on("blur", close)
+        .on("keydown", e => {
+            if ( e.key === "ArrowDown" || e.key === "ArrowUp" ) {
+                e.preventDefault();
+                if ( matches.length > 0 ) {
+                    active = (active + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length;
+                    draw();
+                }
+            } else if ( e.key === "Enter" && active >= 0 ) {
+                choose(matches[active].name);
+            } else if ( e.key === "Escape" ) {
+                input.property("value", "");
+                close();
+            }
+        });
 }
 
 function setupVis() {
@@ -845,10 +1085,25 @@ function setupVis() {
     drawNetwork();
     drawPlaceMap();
     setupControls();
+    setupSearch();
+
+    // the chart under the slider: the groups, the events of the checked types in the zoomed state,
+    // and the years of the slider (what the rest of the view uses)
+    compare = createCompare(root, {
+        getAllEvents: () => events,
+        getEvents: getTypeEvents,
+        getPeriod: () => [ minYear, maxYear ],
+        getYears: () => ({ first: startYear, last: endYear, single: singleYear }),
+        onPick: pickGroups,
+        getDataKey: () => getCheckedTypes().join() + "|" + selectedState,
+        getScope: () => selectedState === null ? "" : getStateName(selectedState),
+        shortName: shortName
+    });
     zoomMap();
 
-    // starts with everything selected, in all the years
-    select({ type: "all" });
+    // starts with nothing selected, in all the years
+    updateAll();
+    updateSliders();
 
     // the first layout is computed before it is shown, so the page does not open with
     // every group flying into place; later changes are animated

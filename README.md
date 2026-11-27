@@ -2,10 +2,10 @@
 
 Visual exploration of organised violence in Brazil (1993-2025), for Information Visualisation 2026/27, University of Aveiro.
 
-Two views are built so far:
+One page with two views, switched with the tabs at the top (the year, filters and selection of each view are kept when you switch):
 
-- **View 1** (`view1.html`): maps of Brazil coloured by the deaths and/or the number of events in each state (the user picks the metric, or both side by side), with a slider to choose an interval of years (play slides the interval over time), a type-of-event filter, a side panel with the details of a state and bar charts of each metric per year.
-- **View 2** (`view2.html`): a force-directed network of the armed groups (links are conflicts, dotted links are attacks on civilians, size and width are deaths). Clicking a link or a group draws its events as dots on a map of Brazil (size is deaths, shade is the typical year) and moves the year range to the years it was active. It only uses events with an exact place (`where_prec` 1-3); the 62 records with only a state-level location are left out, with a note under the map.
+- **View 1** (`#map`): maps of Brazil coloured by the deaths and/or the number of events in each state (the user picks the metric, or both side by side), with a year slider (Single year, Compare two years, or the sum of a Range of years; play goes through the years, sliding the range over time), a type-of-event filter, a side panel with the details of a state and bar charts of each metric per year.
+- **View 2** (`#network`): a force-directed network of the armed groups (links are conflicts, dotted links are attacks on civilians, size and width are deaths). Clicking a link or a group draws its events as dots on a map of Brazil (size is deaths, shade is the typical year) and moves the year range to the years it was active. It only uses events with an exact place (`where_prec` 1-3); the 62 records with only a state-level location are left out, with a note under the map.
 
 ## How to run
 
@@ -15,13 +15,13 @@ The page loads its data with `d3.csv` and `d3.json`, so it needs a local server 
 python3 -m http.server
 ```
 
-Then open http://localhost:8000/view1.html (the views link to each other). An internet connection is needed to load d3 from its CDN.
+Then open http://localhost:8000/ (index.html). An internet connection is needed to load d3 from its CDN.
 
 ## Folders and files
 
-- `view1.html`, `view1.js`: View 1.
-- `view2.html`, `view2.js`: View 2.
-- `style.css`: the styles of both views.
+- `index.html`, `style.css`: the page with both views, and their styles.
+- `main.js`: loads the data once, starts the two views and switches between them.
+- `view1.js`, `view2.js`: the code of each view (ES modules).
 - `data/brazil.csv`: the UCDP GED events, Brazil only.
 - `data/states.json`: simplified state borders.
 - `scripts/prepare_states.py`: creates `states.json` from the original borders (needs `shapely`).
