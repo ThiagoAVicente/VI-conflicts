@@ -520,7 +520,8 @@ aside {
 }
 
 .link {
-    stroke: #77766f;
+    stroke: #55544f;
+    stroke-opacity: 0.6;
 }
 
 /* attacks on civilians: dotted, as in the sketch */
@@ -530,14 +531,6 @@ aside {
     stroke-linecap: round;
 }
 
-.link.active {
-    stroke: #1a1a19;
-}
-
-.link.faded {
-    stroke: #c9c8c3;
-}
-
 .hit {
     stroke: transparent;
     stroke-width: 14;
@@ -545,7 +538,13 @@ aside {
 }
 
 .node {
-    cursor: grab;
+    cursor: pointer;
+}
+
+.emptyHint {
+    font-size: 14px;
+    fill: #77776f;
+    pointer-events: none;
 }
 
 .node circle {
@@ -554,13 +553,14 @@ aside {
     stroke-width: 1.5;
 }
 
-.node.related circle {
-    fill: #9b9a94;
-}
-
 .node.selected circle {
     fill: #1a1a19;
     stroke-width: 3;
+}
+
+/* a click takes the group out of the graph */
+.node.selected:hover circle {
+    fill: #ec4647;
 }
 
 /* white halo so the labels stay readable over the links */
@@ -694,9 +694,8 @@ aside {
     cursor: pointer;
 }
 
-.areaTitle button[aria-pressed="true"] {
-    color: #fcfcfb;
-    background: #1a1a19;
+.areaTitle button:disabled {
+    cursor: default;
 }
 
 #caption p {

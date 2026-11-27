@@ -49,7 +49,7 @@ let events = [],
     startYear,
     endYear,
     singleYear = false,
-    selection = null,
+    graphGroups = [],
     selectedState = null,
     playTimer = null;
 
@@ -141,22 +141,16 @@ function getVisibleEvents() {
     return getTypeEvents().filter(d => d.year >= startYear && d.year <= endYear);
 }
 
-// true if the event is part of the selected conflict, or of any conflict of the selected group
+// true if the event is a conflict between two groups of the graph (the same ones as the links)
 function inSelection(d) {
-    if ( selection === null ) {
-        return false;
-    }
-    if ( selection.type === "all" ) {
-        return true;
-    }
-    return selection.items.some(item => item.type === "link"
-        ? linkKey(d.sideA, d.sideB) === item.key
-        : d.sideA === item.id || d.sideB === item.id);
+    return graphGroups.includes(d.sideA) && graphGroups.includes(d.sideB);
 }
 
-// links: one per conflict pair, nodes: one per group, both with the deaths in the range
+// nodes: the groups added to the graph; links: every conflict between two of them (in the range)
 function buildGraph() {
-    let links = d3.rollups(getVisibleEvents(),
+    let visible = getVisibleEvents();
+
+    let links = d3.rollups(visible.filter(d => graphGroups.includes(d.sideA) && graphGroups.includes(d.sideB)),
         group => ({
             key: linkKey(group[0].sideA, group[0].sideB),
             source: group[0].sideA,
@@ -168,27 +162,20 @@ function buildGraph() {
         d => linkKey(d.sideA, d.sideB))
         .map(d => d[1]);
 
-    let deathsByGroup = new Map();
-    let conflictsByGroup = new Map();
-
-    links.forEach(link => {
-        [ link.source, link.target ].forEach(name => {
-            deathsByGroup.set(name, (deathsByGroup.get(name) || 0) + link.deaths);
-            conflictsByGroup.set(name, (conflictsByGroup.get(name) || 0) + 1);
-        });
-    });
-
-    let nodes = Array.from(deathsByGroup, ([ name, deaths ]) => {
+    // the numbers of a group count all its conflicts, not only the ones with the groups of the graph
+    let nodes = graphGroups.map(name => {
         if ( !nodeById.has(name) ) {
             nodeById.set(name, newNode(name));
         }
-        let node = nodeById.get(name);
-        node.deaths = deaths;
-        node.conflicts = conflictsByGroup.get(name);
+        let node = nodeById.get(name),
+            mine = visible.filter(d => d.sideA === name || d.sideB === name);
+
+        node.deaths = d3.sum(mine, d => d.deaths);
+        node.conflicts = new Set(mine.map(d => linkKey(d.sideA, d.sideB))).size;
         return node;
     });
 
-    // sizes relative to the largest group and conflict in the range, like the sketch
+    // sizes relative to the largest group and conflict of the graph
     let nodeRadius = d3.scaleSqrt()
         .domain([ 0, d3.max(nodes, d => d.deaths) || 1 ])
         .range([ 6, 30 ]);
@@ -196,7 +183,10 @@ function buildGraph() {
         .domain([ 1, (d3.max(links, d => d.deaths) || 1) + 1 ])
         .range([ 1.4, 8.4 ]);
 
-    nodes.forEach(d => d.r = nodeRadius(d.deaths));
+    nodes.forEach(d => {
+        d.r = nodeRadius(d.deaths);
+        d.labelWidth = shortName(d.id).length * 6.2;
+    });
     links.forEach(d => d.width = linkWidth(d.deaths + 1));
 
     return { nodes, links };
@@ -219,9 +209,7 @@ function newNode(name) {
 function getPlaces() {
     let list = getVisibleEvents();
 
-    if ( selection !== null || selectedState === null ) {
-        list = list.filter(inSelection);
-    }
+    list = list.filter(inSelection);
 
     let places = d3.rollups(list,
         group => ({
@@ -262,41 +250,6 @@ function getYearColor(year) {
 }
 
 
-// ---------------------------------------------------------------- selection state
-
-function isActiveLink(link) {
-    if ( selection === null ) {
-        return true;
-    }
-    if ( selection.type === "all" ) {
-        return true;
-    }
-    return selection.items.some(item => item.type === "link"
-        ? link.key === item.key
-        : link.source.id === item.id || link.target.id === item.id);
-}
-
-function isSelectedNode(node) {
-    if ( selection === null ) {
-        return false;
-    }
-    if ( selection.type === "all" ) {
-        return true;
-    }
-    return selection.items.some(item => item.type === "link"
-        ? node.id === item.source || node.id === item.target
-        : node.id === item.id);
-}
-
-// groups that fought the selected group
-function isRelatedNode(node, links) {
-    if ( selection === null || selection.type !== "set" || !selection.items.some(d => d.type === "node") || isSelectedNode(node) ) {
-        return false;
-    }
-    return links.some(l => isActiveLink(l) && (l.source.id === node.id || l.target.id === node.id));
-}
-
-
 // ---------------------------------------------------------------- draw
 
 function transitionTime() {
@@ -309,12 +262,18 @@ function drawNetwork() {
         .attr("role", "img")
         .attr("aria-label", "Network of armed groups, linked by the conflicts between them");
 
-    // clicking the empty background clears the selection
     svg.append("rect")
         .attr("class", "background")
         .attr("width", NET_WIDTH)
-        .attr("height", NET_HEIGHT)
-        .on("click", () => select(null));
+        .attr("height", NET_HEIGHT);
+
+    // shown while the graph is empty
+    svg.append("text")
+        .attr("class", "emptyHint")
+        .attr("x", NET_WIDTH / 2)
+        .attr("y", NET_HEIGHT / 2)
+        .attr("text-anchor", "middle")
+        .text("Search for a group, or use Add all, to build the graph");
 
     linkLayer = svg.append("g");
     hitLayer = svg.append("g");
@@ -323,12 +282,61 @@ function drawNetwork() {
     simulation = d3.forceSimulation()
         // the link length counts the size of both circles, so two large groups do not touch
         .force("link", d3.forceLink().id(d => d.id).distance(l => 70 + l.source.r + l.target.r).strength(0.3))
-        .force("charge", d3.forceManyBody().strength(-380))
-        .force("collide", d3.forceCollide(d => d.r + 10))
+        .force("charge", d3.forceManyBody().strength(-520))
+        // no two groups, with their names, overlap
+        .force("collide", boxCollide())
         // small groups with no link to the rest would drift away without these two
-        .force("x", d3.forceX(NET_WIDTH / 2).strength(0.035))
+        .force("x", d3.forceX(NET_WIDTH / 2).strength(0.03))
         .force("y", d3.forceY(NET_HEIGHT / 2).strength(0.06))
         .on("tick", paintNetwork);
+}
+
+// the box of a group: the circle and its name (on the right of the circle, or on the left near the right edge)
+function getBox(d) {
+    let side = d.x > NET_WIDTH * 0.6 ? -1 : 1,
+        width = 2 * d.r + d.labelWidth + 8;
+
+    return {
+        x: d.x + side * (d.labelWidth + 4) / 2,
+        y: d.y,
+        halfWidth: width / 2 + 3,
+        halfHeight: Math.max(d.r, 8) + 3
+    };
+}
+
+// pushes apart the groups whose boxes overlap, along the axis with less overlap
+function boxCollide() {
+    let nodes = [];
+
+    function force() {
+        for ( let pass = 0; pass < 3; pass++ ) {
+            for ( let i = 0; i < nodes.length; i++ ) {
+                for ( let j = i + 1; j < nodes.length; j++ ) {
+                    let a = getBox(nodes[i]),
+                        b = getBox(nodes[j]),
+                        dx = b.x - a.x,
+                        dy = b.y - a.y,
+                        overlapX = a.halfWidth + b.halfWidth - Math.abs(dx),
+                        overlapY = a.halfHeight + b.halfHeight - Math.abs(dy);
+
+                    if ( overlapX > 0 && overlapY > 0 ) {
+                        if ( overlapY < overlapX ) {
+                            let move = overlapY / 2 * (dy < 0 ? -1 : 1);
+                            nodes[i].y -= move;
+                            nodes[j].y += move;
+                        } else {
+                            let move = overlapX / 2 * (dx < 0 ? -1 : 1);
+                            nodes[i].x -= move;
+                            nodes[j].x += move;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    force.initialize = list => nodes = list;
+    return force;
 }
 
 // drag a group to move it, a short click (less than 4px) selects it
@@ -353,9 +361,11 @@ let dragNode = d3.drag()
         d.fy = null;
     });
 
-// rebuilds the network for the current filters, keeping the positions of the groups
+// rebuilds the network for the groups in the graph and the filters, keeping the positions of the groups
 function updateNetwork() {
     let { nodes, links } = buildGraph();
+
+    d3.select("#network .emptyHint").style("display", nodes.length === 0 ? null : "none");
 
     // the link force replaces the names in source/target by the node objects
     simulation.nodes(nodes);
@@ -365,42 +375,34 @@ function updateNetwork() {
         .data(links, d => d.key)
         .join(enter => enter.append("line").attr("stroke-width", 0))
             .attr("class", d => "link " + d.type)
-            .classed("active", d => selection !== null && isActiveLink(d))
-            .classed("faded", d => selection !== null && !isActiveLink(d))
         .transition("width").duration(transitionTime())
-            .attr("stroke-width", d => selection !== null && isActiveLink(d) ? d.width + 2 : d.width);
+            .attr("stroke-width", d => d.width);
 
-    // wide invisible lines on top of the links, so thin links are easy to click
+    // wide invisible lines on top of the links, so thin links are easy to hover
     hitLayer.selectAll("line")
         .data(links, d => d.key)
         .join("line")
             .attr("class", "hit")
-            .on("click", (e, d) => select({ type: "link", key: d.key, source: d.source.id, target: d.target.id }, e.ctrlKey || e.metaKey || e.shiftKey))
             .on("mousemove", (e, d) => showTooltip(e, shortName(d.source.id) + " vs " + shortName(d.target.id) + ": "
                 + formatNumber(d.deaths) + " deaths, " + formatNumber(d.events) + " events"))
             .on("mouseout", hideTooltip);
 
-    let groups = nodeLayer.selectAll("g.node")
+    nodeLayer.selectAll("g.node")
         .data(nodes, d => d.id)
         .join(enter => {
             let g = enter.append("g")
-                .attr("class", "node")
+                .attr("class", "node selected")
                 .call(dragNode)
-                .on("click", (e, d) => select({ type: "node", id: d.id }, e.ctrlKey || e.metaKey || e.shiftKey))
+                .on("click", (e, d) => removeGroup(d.id))
                 .on("mousemove", (e, d) => showTooltip(e, d.id + ": " + formatNumber(d.deaths) + " deaths in "
-                    + d.conflicts + (d.conflicts === 1 ? " conflict" : " conflicts")))
+                    + d.conflicts + (d.conflicts === 1 ? " conflict" : " conflicts") + ". Click to take it out"))
                 .on("mouseout", hideTooltip);
             g.append("circle").attr("r", 0);
             g.append("text").attr("y", 4).text(d => shortName(d.id));
             return g;
-        });
-
-    groups
-        .classed("selected", d => isSelectedNode(d))
-        .classed("related", d => isRelatedNode(d, links));
-
-    groups.select("circle").transition("size").duration(transitionTime())
-        .attr("r", d => d.r);
+        })
+        .select("circle").transition("size").duration(transitionTime())
+            .attr("r", d => d.r);
 
     simulation.alpha(0.5).restart();
     paintNetwork();
@@ -590,32 +592,21 @@ function updatePlaceLegend(places) {
     }
 }
 
-// the name of a selected group or conflict
-function describeItem(item) {
-    return item.type === "link" ? shortName(item.source) + " vs " + shortName(item.target) : shortName(item.id);
-}
-
 function updateCaption(list, places) {
     let stateName = selectedState === null ? null : getStateName(selectedState);
     let where = stateName === null ? "" : " in " + stateName;
-    let title = "Click a link (a conflict) or a group in the network to see where it happened (Ctrl+click to select several, or use Select all), or a state on the map to zoom into it.";
+    let title = "Add groups to the graph with the search box (or Add all) to see where they fought. Click a state on the map to zoom into it.";
     let numbers = "";
 
-    if ( selection !== null ) {
-        if ( selection.type === "all" ) {
-            title = "All conflicts" + where;
-        } else if ( selection.items.length > 1 ) {
-            title = selection.items.map(describeItem).join(", ") + where;
-        } else if ( selection.items[0].type === "link" ) {
-            title = describeItem(selection.items[0]) + where;
-        } else {
-            title = shortName(selection.items[0].id) + " (all its conflicts" + where + ")";
-        }
+    if ( graphGroups.length > 0 ) {
+        title = graphGroups.length === 1 ? "Add another group to see the conflicts between them"
+            : "Conflicts between " + (graphGroups.length <= 4 ? graphGroups.map(shortName).join(", ")
+                : formatNumber(graphGroups.length) + " groups") + where;
     } else if ( stateName !== null ) {
-        title = "All conflicts in " + stateName;
+        title = "Add groups to the graph to see where they fought in " + stateName;
     }
 
-    if ( selection !== null || stateName !== null ) {
+    if ( graphGroups.length > 0 ) {
         if ( list.length === 0 ) {
             numbers = "No events with an exact place in " + formatYears([ startYear, endYear ]) + " for these types.";
         } else {
@@ -626,10 +617,7 @@ function updateCaption(list, places) {
         }
     }
 
-    d3.select("#captionTitle").text(title).classed("hint", selection === null && stateName === null);
-
-    // the button stays pressed while everything is selected
-    d3.select("#selectAll").attr("aria-pressed", selection !== null && selection.type === "all");
+    d3.select("#captionTitle").text(title).classed("hint", graphGroups.length === 0);
     d3.select("#captionNumbers").text(numbers);
 
     // the records left out, counted for the zoomed state only
@@ -644,6 +632,7 @@ function updateCaption(list, places) {
     d3.select("#networkTitle").text(stateName === null
         ? "Groups and conflicts in Brazil"
         : "Only the groups and conflicts in " + stateName);
+    d3.select("#clearGraph").property("disabled", graphGroups.length === 0);
 }
 
 function formatNumber(value) {
@@ -666,18 +655,18 @@ function updateAll() {
 
 // ---------------------------------------------------------------- interaction
 
-// the events in focus, in any year: those of the selected conflict or group (or all of them),
+// the events in focus, in any year: those of the graph (all of them while it is empty),
 // of the checked types, inside the zoomed state if there is one
 function getFocusEvents() {
     let list = getTypeEvents();
 
-    return selection === null ? list : list.filter(inSelection);
+    return graphGroups.length === 0 ? list : list.filter(inSelection);
 }
 
-// moves the slider to the years of the events in focus, so selecting a conflict or
+// moves the slider to the years of the events in focus, so changing the graph or
 // zooming into a state always shows the whole period it was active.
 // In single year mode the year stays where it is (and the player keeps going): the user is
-// watching the selection year by year, and selecting something must not take that mode away
+// watching the graph year by year, and changing it must not take that mode away
 function jumpToFocusYears() {
     let years = getFocusEvents().map(d => d.year);
 
@@ -691,8 +680,9 @@ function jumpToFocusYears() {
     setYears(d3.min(years), d3.max(years));
 }
 
-// called by main.js when a conflict is clicked in View 1: selects it here, in the same years
-// (one year: single mode; otherwise range) and with the same types, in the whole country
+// called by main.js when a conflict is clicked in View 1: the graph gets the two groups of the
+// conflict, in the same years (one year: single mode; otherwise range) and with the same types,
+// in the whole country
 export function showConflict(conflict, first, last, types) {
     let event = events.find(d => linkKey(d.sideA, d.sideB) === conflict);
 
@@ -707,127 +697,65 @@ export function showConflict(conflict, first, last, types) {
         zoomMap();
     }
 
-    selection = event === undefined ? { type: "all" }
-        : { type: "set", items: [ { type: "link", key: conflict, source: event.sideA, target: event.sideB } ] };
-
-    // a conflict that only has imprecise places (not drawn here) cannot be shown: all the conflicts then
-    if ( selection.type === "set" && getFocusEvents().length === 0 ) {
-        selection = { type: "all" };
-    }
-
-    if ( selection.type === "set" ) {
-        compare.setGroups(getSelectedGroups(), true);
-    }
+    graphGroups = event === undefined ? [] : [ event.sideA, event.sideB ];
+    compare.setGroups(graphGroups, true);
 
     singleYear = first === last;
     updateModeSwitch();
     setYears(first, last);
 }
 
-// the groups of the selection (a conflict is two groups), to show them in the chart under the slider
-function getSelectedGroups() {
-    if ( selection === null || selection.type !== "set" ) {
-        return [];
-    }
+// the graph changed: the chart under the slider compares its groups (the first few, or the ones
+// with most deaths when "top" is true) and the slider goes to the years of the graph
+function graphChanged(top, keepYears) {
+    compare.setGroups(top ? compare.topGroups() : graphGroups, true);
 
-    let names = [];
-
-    selection.items.forEach(item => {
-        (item.type === "link" ? [ item.source, item.target ] : [ item.id ]).forEach(name => {
-            if ( !names.includes(name) ) {
-                names.push(name);
-            }
-        });
-    });
-    return names;
-}
-
-function sameItem(a, b) {
-    return a.type === b.type && (a.key || a.id) === (b.key || b.id);
-}
-
-// a click selects only that conflict or group (clicking it again clears it, like in View 1);
-// with Ctrl (add = true) it is added to the selection, or taken out of it
-function select(newSelection, add = false) {
-    if ( newSelection === null || newSelection.type === "all" ) {
-        let same = newSelection !== null && selection !== null && selection.type === "all";
-
-        selection = same ? null : newSelection;
-    } else {
-        let items = selection !== null && selection.type === "set" ? selection.items : [],
-            found = items.findIndex(d => sameItem(d, newSelection));
-
-        if ( add ) {
-            items = found >= 0 ? items.filter((d, i) => i !== found) : [ ...items, newSelection ];
-        } else {
-            items = found >= 0 && items.length === 1 ? [] : [ newSelection ];
-        }
-
-        // the chart compares a few groups only: the last one is not added
-        let tooMany = new Set(items.flatMap(d => d.type === "link" ? [ d.source, d.target ] : [ d.id ])
-            .filter(name => compare.canPick(name))).size > compare.maxGroups;
-
-        if ( tooMany ) {
-            return;
-        }
-        selection = items.length === 0 ? null : { type: "set", items: items };
-    }
-
-    if ( selection !== null && selection.type === "set" ) {
-        compare.setGroups(getSelectedGroups(), true);
-    } else if ( selection !== null && selection.type === "all" ) {
-        // all the groups are selected, the chart compares the ones with most deaths
-        compare.setGroups(compare.topGroups(), true);
-    }
-
-    // selecting everything keeps the years on the slider; a conflict or group moves it to its years
-    if ( selection !== null && selection.type === "all" ) {
+    if ( keepYears ) {
         updateAll();
     } else {
         jumpToFocusYears();
     }
 }
 
-// the groups were picked in the chart: the network selects them too (the conflicts of the selection
-// whose two groups stay picked are kept; a conflict that loses one group becomes the other group)
-function pickGroups(names) {
-    let items = [];
-
-    if ( selection !== null && selection.type === "set" ) {
-        selection.items.forEach(item => {
-            if ( item.type === "node" ) {
-                items.push(item);
-            } else if ( names.includes(item.source) && names.includes(item.target) ) {
-                items.push(item);
-            } else if ( names.includes(item.source) ) {
-                items.push({ type: "node", id: item.source });
-            } else if ( names.includes(item.target) ) {
-                items.push({ type: "node", id: item.target });
-            }
-        });
-        // the groups the chart does not compare (the civilians) are not touched by the chart
-        items = items.filter(d => d.type !== "node" || names.includes(d.id) || !compare.canPick(d.id));
+function addGroup(name) {
+    if ( !graphGroups.includes(name) ) {
+        graphGroups = [ ...graphGroups, name ];
+        graphChanged(false, false);
     }
+}
 
-    names.forEach(name => {
-        if ( !items.some(d => sameItem(d, { type: "node", id: name })) ) {
-            items.push({ type: "node", id: name });
-        }
+// clicking a node takes it out of the graph
+function removeGroup(name) {
+    graphGroups = graphGroups.filter(d => d !== name);
+    hideTooltip();
+    graphChanged(false, false);
+}
+
+// every group with events of the checked types (in the zoomed state), in any year
+function addAllGroups() {
+    let names = new Set();
+
+    getTypeEvents().forEach(d => {
+        names.add(d.sideA);
+        names.add(d.sideB);
     });
 
-    // unique, and a group already inside a selected conflict is not added twice
-    let covered = new Set();
-    items = items.filter(d => {
-        let key = d.type + ":" + (d.key || d.id);
+    graphGroups = Array.from(names);
+    graphChanged(true, true);
+}
 
-        if ( covered.has(key) ) {
-            return false;
-        }
-        covered.add(key);
-        return true;
-    });
+function clearGraph() {
+    graphGroups = [];
+    hideTooltip();
+    graphChanged(false, true);
+}
 
-    selection = items.length === 0 ? { type: "all" } : { type: "set", items: items };
+// the groups were picked in the chart: the graph gets them too (the groups the chart does not
+// compare, the civilians, are not touched by the chart)
+function pickGroups(names) {
+    let kept = graphGroups.filter(name => names.includes(name) || !compare.canPick(name));
+
+    graphGroups = [ ...kept, ...names.filter(name => !kept.includes(name)) ];
     updateAll();
 }
 
@@ -835,12 +763,6 @@ function pickGroups(names) {
 // clicking the zoomed state again goes back, like in View 1
 function selectState(stateCode) {
     selectedState = selectedState === stateCode ? null : stateCode;
-
-    // the selected conflict or group stays selected when zooming in, unless it has no
-    // events in that state (then the map would be empty): it goes back to all the conflicts there
-    if ( selectedState !== null && selection !== null && selection.type !== "all" && getFocusEvents().length === 0 ) {
-        selection = null;
-    }
 
     hideTooltip();
     zoomMap();
@@ -983,31 +905,32 @@ function setupControls() {
 
     root.select(".playButton").on("click", togglePlay);
     d3.select("#zoomOut").on("click", () => selectState(null));
-    d3.select("#selectAll").on("click", () => select({ type: "all" }));
+    d3.select("#selectAll").on("click", addAllGroups);
+    d3.select("#clearGraph").on("click", clearGraph);
     root.selectAll(".typeFilter input").on("change", updateAll);
 }
 
 // ---------------------------------------------------------------- search
 
-// the box above the network: typing lists the groups with that text in the name (the ones with
-// more deaths first); a click or Enter selects the group, like clicking its circle
+// the box above the network: the groups that are not in the graph yet, the ones with more events
+// first (all of them when the box is empty); a click or Enter adds the group to the graph
 function setupSearch() {
     let input = d3.select("#groupSearch"),
         list = d3.select("#searchResults"),
         active = -1,
         matches = [];
 
-    let deathsByGroup = new Map();
+    let eventsByGroup = new Map();
 
     events.forEach(d => {
-        [ d.sideA, d.sideB ].forEach(name => deathsByGroup.set(name, (deathsByGroup.get(name) || 0) + d.deaths));
+        [ d.sideA, d.sideB ].forEach(name => eventsByGroup.set(name, (eventsByGroup.get(name) || 0) + 1));
     });
 
     // lower case and without accents, so "ceara" finds "Ceará"
     let simple = text => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    let groups = Array.from(deathsByGroup, d => ({ name: d[0], deaths: d[1], text: simple(d[0] + " " + shortName(d[0])) }))
-        .sort((a, b) => d3.descending(a.deaths, b.deaths));
+    let groups = Array.from(eventsByGroup, d => ({ name: d[0], events: d[1], text: simple(d[0] + " " + shortName(d[0])) }))
+        .sort((a, b) => d3.descending(a.events, b.events) || d3.ascending(a.name, b.name));
 
     function close() {
         list.property("hidden", true);
@@ -1015,23 +938,17 @@ function setupSearch() {
         active = -1;
     }
 
+    // the box stays open, to add the next group
     function choose(name) {
         input.property("value", "");
-        close();
-        input.node().blur();
-
-        let already = selection !== null && selection.type === "set" && selection.items.length === 1
-            && selection.items[0].type === "node" && selection.items[0].id === name;
-
-        if ( !already ) {
-            select({ type: "node", id: name });
-        }
+        addGroup(name);
+        showMatches();
     }
 
     function showMatches() {
         let query = simple(input.property("value").trim());
 
-        matches = query === "" ? [] : groups.filter(d => d.text.includes(query)).slice(0, 8);
+        matches = groups.filter(d => !graphGroups.includes(d.name) && d.text.includes(query)).slice(0, 8);
         active = matches.length > 0 ? 0 : -1;
         draw();
     }
@@ -1042,7 +959,7 @@ function setupSearch() {
             .join("li")
                 .attr("role", "option")
                 .classed("active", (d, i) => i === active)
-                .text(d => shortName(d.name) + (shortName(d.name) !== d.name ? " (" + d.name + ")" : "") + " · " + formatNumber(d.deaths) + " deaths")
+                .text(d => shortName(d.name) + (shortName(d.name) !== d.name ? " (" + d.name + ")" : "") + " · " + formatNumber(d.events) + " events")
                 .on("mousedown", (e, d) => {
                     // before the input loses the focus
                     e.preventDefault();
