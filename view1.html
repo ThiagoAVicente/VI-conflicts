@@ -23,7 +23,7 @@
 
     <header>
         <h1>Conflicts in Brazil</h1>
-        <p>Deaths from organised violence by state. Source: UCDP GED, Brazil events, 1993-2025.</p>
+        <p id="subtitle"></p>
     </header>
 
     <main>
@@ -33,6 +33,13 @@
         </section>
 
         <aside>
+            <label id="metricPicker">Show on the map
+                <select id="metricSelect">
+                    <option value="deaths">Deaths</option>
+                    <option value="events">Events</option>
+                </select>
+            </label>
+
             <fieldset id="typeFilter">
                 <legend>Type of event</legend>
                 <label><input type="checkbox" value="faction" checked> Faction vs faction</label>
@@ -45,7 +52,8 @@
                     <span id="panelYear"></span>
                 </div>
                 <p id="panelNumbers"><span id="panelDeaths">0</span> deaths, <span id="panelEvents">0</span> events</p>
-                <h3>Main conflicts</h3>
+                <p id="panelCompare"></p>
+                <h3 id="conflictTitle">Main conflicts</h3>
                 <div id="conflictList"></div>
                 <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil.</p>
             </div>
@@ -56,8 +64,13 @@
         <button id="prevButton" aria-label="Previous year">&lsaquo; Prev</button>
         <button id="playButton" aria-label="Play through the years">Play</button>
         <button id="nextButton" aria-label="Next year">Next &rsaquo;</button>
+        <label id="compareLabel"><input type="checkbox" id="compareToggle"> Compare years</label>
         <span id="minYear"></span>
-        <input id="yearSlider" type="range" step="1" aria-label="Year">
+        <div id="yearRange" class="compareRange">
+            <div class="rangeTrack"><div id="rangeFill"></div></div>
+            <input id="baseSlider" type="range" step="1" aria-label="Year to compare with" hidden>
+            <input id="yearSlider" type="range" step="1" aria-label="Year">
+        </div>
         <span id="maxYear"></span>
         <strong id="yearLabel"></strong>
     </section>

@@ -72,6 +72,9 @@ main {
     align-items: center;
     gap: 14px;
     padding-top: 8px;
+    /* the same height in both modes (the compare colour bar is taller), so the page does not move */
+    height: 44px;
+    box-sizing: border-box;
     font-size: 13px;
     color: #55554f;
 }
@@ -92,6 +95,19 @@ main {
 aside {
     flex: 0 0 clamp(320px, 30%, 480px);
     overflow-y: auto;
+}
+
+#metricPicker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+#metricSelect {
+    padding: 4px;
+    font-size: 14px;
 }
 
 #typeFilter {
@@ -168,47 +184,46 @@ aside {
 }
 
 /* one grey track and one round handle: no colour on the left side, so it does not look like a range */
-#yearSlider {
-    flex: 1;
-    height: 20px;
-    background: transparent;
-    -webkit-appearance: none;
-    appearance: none;
-    cursor: pointer;
+#compareLabel {
+    white-space: nowrap;
+    margin-left: 8px;
 }
 
-#yearSlider::-webkit-slider-runnable-track {
-    height: 6px;
-    border-radius: 3px;
-    background: #d8d7d2;
+#panelCompare {
+    display: none;
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: #55554f;
 }
 
-#yearSlider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 20px;
-    height: 20px;
-    margin-top: -7px;
-    border: 2px solid #fcfcfb;
-    border-radius: 50%;
-    background: #1a1a19;
+/* the colour bar of the compare mode: the marks sit under the bar, centred on their position */
+#legend .changeLegend {
+    position: relative;
+    display: block;
+    width: 260px;
+    height: 34px;
+    margin: 0 24px 0 28px;
+    align-self: flex-start;
 }
 
-#yearSlider::-moz-range-track {
-    height: 6px;
-    border-radius: 3px;
-    background: #d8d7d2;
+#legend .changeBar {
+    display: block;
+    width: 100%;
+    height: 12px;
+    border-radius: 2px;
 }
 
-#yearSlider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border: 2px solid #fcfcfb;
-    border-radius: 50%;
-    background: #1a1a19;
+#legend .changeLegend b {
+    position: absolute;
+    top: 16px;
+    transform: translateX(-50%);
+    font-size: 12px;
+    font-weight: 400;
 }
 
 #yearLabel {
-    min-width: 48px;
+    min-width: 128px;
+    text-align: right;
     font-size: 20px;
 }
 
@@ -575,6 +590,11 @@ aside {
     cursor: grab;
 }
 
+/* Firefox paints the part before the handle by default, this removes it */
+#yearRange input::-moz-range-progress {
+    background: transparent;
+}
+
 #yearRange input::-moz-range-track {
     background: transparent;
 }
@@ -627,4 +647,15 @@ aside {
     aside {
         flex: none;
     }
+}
+
+/* View 1: the fill between the two handles of the compare mode is black, and a single handle
+   can be moved by clicking anywhere on the track (with two handles only the handles take the mouse) */
+.compareRange #rangeFill {
+    background: #1a1a19;
+}
+
+#yearRange:not(.comparing) #yearSlider {
+    pointer-events: auto;
+    cursor: pointer;
 }
