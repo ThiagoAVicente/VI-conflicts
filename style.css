@@ -35,14 +35,25 @@ main {
     flex-direction: column;
 }
 
+/* one map per metric shown, side by side */
 #map {
     flex: 1;
     min-height: 0;
+    display: flex;
+    gap: 16px;
 }
 
-#map svg {
+.mapCell {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.mapCell svg {
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: 100%;
 }
 
 .state {
@@ -67,22 +78,23 @@ main {
     pointer-events: none;
 }
 
-#legend {
+.mapLegend {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
+    gap: 4px 14px;
     padding-top: 8px;
     font-size: 13px;
     color: #55554f;
 }
 
-#legend span {
+.mapLegend span {
     display: inline-flex;
     align-items: center;
     gap: 5px;
 }
 
-#legend i {
+.mapLegend i {
     width: 16px;
     height: 12px;
     border-radius: 2px;
@@ -94,13 +106,41 @@ aside {
     overflow-y: auto;
 }
 
-#typeFilter {
+#typeFilter,
+#metricFilter {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin: 0 0 16px;
     border: 1px solid #d8d7d2;
     border-radius: 6px;
+}
+
+/* the metric and type filters of View 1, next to each other */
+.filterRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 12px;
+}
+
+.filterRow fieldset {
+    flex: 1;
+}
+
+/* the hue of each metric, the same in the maps, the bars and the charts */
+.metricSwatch {
+    display: inline-block;
+    width: 12px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.metricSwatch.deaths {
+    background: #256abf;
+}
+
+.metricSwatch.events {
+    background: #e6550d;
 }
 
 #panel {
@@ -148,11 +188,61 @@ aside {
     gap: 8px;
 }
 
+/* the number keeps its unit on one line, the bar gets shorter instead */
+.conflictBar span {
+    white-space: nowrap;
+}
+
 .conflictBar div {
     height: 8px;
     border-radius: 0 4px 4px 0;
     background: #256abf;
 }
+
+/* bar charts of the deaths and events per year, under the details */
+.trendChart svg {
+    width: 100%;
+    display: block;
+}
+
+.trendGrid line {
+    stroke: #e6e5e1;
+}
+
+.trendGrid .domain {
+    display: none;
+}
+
+.trendGrid text,
+.trendAxis text {
+    fill: #77776f;
+    font-size: 11px;
+}
+
+.trendAxis .domain,
+.trendAxis line {
+    stroke: #9b9a94;
+}
+
+.trendHit {
+    fill: transparent;
+    cursor: pointer;
+}
+
+/* the css fill wins over the fill attribute that the transitions set */
+.trendBar.hovered {
+    fill: #1a1a19;
+}
+
+.trendNote {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #77776f;
+}
+
 
 #controls {
     display: flex;
@@ -165,46 +255,6 @@ aside {
     padding: 6px 12px;
     font-size: 14px;
     cursor: pointer;
-}
-
-/* one grey track and one round handle: no colour on the left side, so it does not look like a range */
-#yearSlider {
-    flex: 1;
-    height: 20px;
-    background: transparent;
-    -webkit-appearance: none;
-    appearance: none;
-    cursor: pointer;
-}
-
-#yearSlider::-webkit-slider-runnable-track {
-    height: 6px;
-    border-radius: 3px;
-    background: #d8d7d2;
-}
-
-#yearSlider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 20px;
-    height: 20px;
-    margin-top: -7px;
-    border: 2px solid #fcfcfb;
-    border-radius: 50%;
-    background: #1a1a19;
-}
-
-#yearSlider::-moz-range-track {
-    height: 6px;
-    border-radius: 3px;
-    background: #d8d7d2;
-}
-
-#yearSlider::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    border: 2px solid #fcfcfb;
-    border-radius: 50%;
-    background: #1a1a19;
 }
 
 #yearLabel {
@@ -521,7 +571,7 @@ aside {
     font-size: 12px;
 }
 
-/* two range inputs on top of each other: only the handles take the mouse */
+/* year interval of both views: two range inputs on top of each other, only the handles take the mouse */
 #yearRange {
     position: relative;
     flex: 1;
@@ -611,6 +661,11 @@ aside {
     }
 
     #map {
+        flex-direction: column;
+    }
+
+    .mapCell {
+        flex: none;
         height: 70vh;
     }
 

@@ -4,7 +4,7 @@ Visual exploration of organised violence in Brazil (1993-2025), for Information 
 
 Two views are built so far:
 
-- **View 1** (`view1.html`): a map of Brazil coloured by the deaths in each state, with a year slider, a type-of-event filter and a side panel with the details of a state.
+- **View 1** (`view1.html`): maps of Brazil coloured by the deaths and/or the number of events in each state (the user picks the metric, or both side by side), with a slider to choose an interval of years (play slides the interval over time), a type-of-event filter, a side panel with the details of a state and bar charts of each metric per year.
 - **View 2** (`view2.html`): a force-directed network of the armed groups (links are conflicts, dotted links are attacks on civilians, size and width are deaths). Clicking a link or a group draws its events as dots on a map of Brazil (size is deaths, shade is the typical year) and moves the year range to the years it was active. It only uses events with an exact place (`where_prec` 1-3); the 62 records with only a state-level location are left out, with a note under the map.
 
 ## How to run
