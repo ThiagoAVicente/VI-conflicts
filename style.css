@@ -67,6 +67,14 @@ main {
     stroke-width: 1.5;
 }
 
+.state.selected.stateA {
+    stroke: #6a4ce2;
+}
+
+.state.selected.stateB {
+    stroke: #008a17;
+}
+
 .state.selected {
     stroke: #1a1a19;
     stroke-width: 3;
@@ -1048,4 +1056,100 @@ aside {
 .tipRow strong {
     min-width: 40px;
     text-align: right;
+}
+
+/* the comparison of two states: replaces the details of one state in the panel */
+#panel.isComparing > :not(#stateCompare) {
+    display: none;
+}
+
+.scHead {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.scColumns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 12px;
+}
+
+.scColumn {
+    min-width: 0;
+    padding-top: 8px;
+    border-top: 3px solid;
+}
+
+#panel .scName {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 0;
+    font-size: 16px;
+}
+
+.scName button {
+    padding: 0 6px;
+    font-size: 16px;
+    line-height: 1.2;
+    cursor: pointer;
+    border: none;
+    background: none;
+    color: #55554f;
+}
+
+.scNumbers {
+    display: flex;
+    flex-direction: column;
+    margin: 6px 0 0;
+    font-size: 15px;
+}
+
+.scNumbers strong {
+    font-size: 18px;
+}
+
+.scColumn h4,
+.scChart h4 {
+    margin: 12px 0 4px;
+    font-size: 13px;
+    color: #55554f;
+}
+
+.scConflicts {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+}
+
+.scConflicts li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.scConflictValue {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.scEmpty {
+    margin: 0;
+    font-size: 13px;
+    color: #77776f;
+}
+
+.scChart svg {
+    display: block;
+    width: 100%;
+}
+
+.scHint {
+    margin: 16px 0 0;
+    font-size: 13px;
+    color: #77776f;
 }

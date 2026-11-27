@@ -4,6 +4,7 @@
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
 import { enableTrackClick } from "./slider.js";
+import { createStateCompare } from "./statecompare.js";
 
 let DEFAULT_YEAR = 2023,
     MAP_WIDTH = 620,
@@ -92,6 +93,8 @@ let events = [],
     mode = "single",
     baseYear,
     selectedState = null,
+    // the second state of the comparison (Ctrl+click), next to the selected one
+    comparedState = null,
     stateGroups = new Map(),
     baseGroups = new Map(),
     yearGroups = new Map(),
@@ -99,7 +102,8 @@ let events = [],
 
 let pathMaker,
     maps = [],
-    trendCharts = [];
+    trendCharts = [],
+    stateCompare = null;
 
 
 // ---------------------------------------------------------------- load + preprocess
@@ -263,7 +267,7 @@ function drawMaps() {
                 .attr("fill", metric.colors[0])
                 .on("mousemove", showTooltip)
                 .on("mouseout", hideTooltip)
-                .on("click", (e, d) => handleSelection(d.id));
+                .on("click", (e, d) => handleSelection(d.id, e.ctrlKey || e.metaKey || e.shiftKey));
 
         // state codes, only on states big enough to hold them
         let labels = svg.append("g").selectAll("text")
@@ -411,7 +415,9 @@ function updateMaps() {
 
         metric.colorScale.domain(getClassLimits(metric));
         drawLegend(map);
-        map.paths.classed("selected", d => d.id === selectedState);
+        map.paths.classed("selected", d => isStateSelected(d.id))
+            .classed("stateA", d => comparedState !== null && d.id === selectedState)
+            .classed("stateB", d => d.id === comparedState);
 
         // each state fades from the colour it shows now to the colour of the new years;
         // new years arriving mid-fade interrupt the old fade and start from the current colour
@@ -423,7 +429,7 @@ function updateMaps() {
             });
 
         // the selected state goes on top so its border is not hidden by the neighbours
-        map.paths.filter(d => d.id === selectedState).raise();
+        map.paths.filter(d => isStateSelected(d.id)).raise();
 
         map.labels.transition("fill")
             .duration(transitionTime())
@@ -654,6 +660,7 @@ function updateAll() {
     updatePanel();
     updateTrends();
     showMetrics();
+    stateCompare.update(comparedState === null ? [] : [ selectedState, comparedState ]);
 }
 
 
@@ -672,9 +679,28 @@ function openConflict(conflict) {
     }));
 }
 
-function handleSelection(stateCode) {
-    // clicking the selected state again goes back to the whole country
-    selectedState = selectedState === stateCode ? null : stateCode;
+function isStateSelected(stateCode) {
+    return stateCode === selectedState || stateCode === comparedState;
+}
+
+// a click selects one state (clicking the selected state again goes back to the whole country).
+// With Ctrl (add = true) a second state is added to be compared with the first one, or taken out
+function handleSelection(stateCode, add = false) {
+    if ( add ) {
+        if ( stateCode === selectedState ) {
+            selectedState = comparedState;
+            comparedState = null;
+        } else if ( stateCode === comparedState ) {
+            comparedState = null;
+        } else if ( selectedState === null ) {
+            selectedState = stateCode;
+        } else {
+            comparedState = stateCode;
+        }
+    } else {
+        selectedState = selectedState === stateCode && comparedState === null ? null : stateCode;
+        comparedState = null;
+    }
     d3.select("#panelHint").style("display", selectedState === null ? "block" : "none");
     updateAll();
 }
@@ -902,6 +928,19 @@ function setupVis() {
 
     drawMaps();
     drawTrends();
+
+    // the comparison of two states, in the place of the details of one
+    stateCompare = createStateCompare(root, {
+        getEvents: getTypeEvents,
+        getYears: () => [ minYear, maxYear ],
+        getShownYears: getShownYears,
+        getShownMetrics: getShownMetrics,
+        getName: code => geoData.features.find(d => d.id === code).properties.name,
+        formatNumber: formatNumber,
+        moveTooltip: moveTooltip,
+        hideTooltip: hideTooltip,
+        onRemove: code => handleSelection(code, true)
+    });
     setupControls();
     setYear(Math.min(DEFAULT_YEAR, maxYear));
 }

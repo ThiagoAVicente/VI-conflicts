@@ -38,7 +38,7 @@
                     <div class="filterRow">
                         <fieldset id="metricFilter">
                             <legend>Metric</legend>
-                            <label><input type="checkbox" value="deaths" checked> <i class="metricSwatch deaths"></i> Death toll</label>
+                            <label><input type="checkbox" value="deaths" checked> <i class="metricSwatch deaths"></i> Deaths</label>
                             <label><input type="checkbox" value="events"> <i class="metricSwatch events"></i> Events</label>
                         </fieldset>
                         <fieldset class="typeFilter">
@@ -61,6 +61,8 @@
                         <!-- one bar chart per metric shown -->
                         <div id="trends"></div>
                         <p class="trendNote"><i class="metricSwatch deaths" data-metric="deaths"></i><i class="metricSwatch events" data-metric="events"></i> the selected years. Click a bar to see only that year.</p>
+
+                        <div id="stateCompare" hidden></div>
 
                         <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil. Click a conflict to see it in the network.</p>
                     </div>
