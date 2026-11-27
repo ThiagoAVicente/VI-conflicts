@@ -840,6 +840,35 @@ aside {
     cursor: pointer;
 }
 
+/* View 2, while a range plays: the range turns blue, the part already played dark blue,
+   and the handle of the year being played is blue too */
+.rangeFill.playing {
+    background: linear-gradient(to right, #0d366b var(--played, 0%), #9ec5f4 var(--played, 0%));
+}
+
+.yearRange.playingRange .mainSlider::-webkit-slider-thumb {
+    background: #256abf;
+}
+
+.yearRange.playingRange .mainSlider::-moz-range-thumb {
+    background: #256abf;
+}
+
+/* under the year, without making the row taller (so the page does not jump when playing starts) */
+.yearLabel {
+    position: relative;
+}
+
+.yearLabel small {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 400;
+    color: #256abf;
+}
+
 /* the two views are in the same page, one at a time; each takes the place the page had before */
 .viewPage {
     flex: 1;

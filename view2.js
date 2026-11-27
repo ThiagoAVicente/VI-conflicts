@@ -51,7 +51,16 @@ let events = [],
     singleYear = false,
     selection = null,
     selectedState = null,
-    playTimer = null;
+    playTimer = null,
+    // while playing: the position of the handle (a fractional year)
+    playPosition = null,
+    // the range being played (or paused) in Range mode: the slider keeps showing it while
+    // the map and the network show one year of it at a time
+    playRange = null;
+
+// while playing, a dot keeps the size of its year and only changes in the middle of the
+// way to the next year (this part of the year), so each year can be read before it changes
+let MORPH_SHARE = 0.5;
 
 // the node objects are kept between updates, so a group keeps its place in the layout
 // when the filters remove it and bring it back
@@ -216,12 +225,13 @@ function newNode(name) {
 
 // the places of the selected events: one dot per coordinate.
 // Inside a zoomed state with nothing selected, all the conflicts of the state are shown
-function getPlaces() {
-    let list = getVisibleEvents();
+// the events drawn on the map: those of the selection, or every event of the zoomed state
+function getMapEvents(list) {
+    return selection !== null || selectedState === null ? list.filter(inSelection) : list;
+}
 
-    if ( selection !== null || selectedState === null ) {
-        list = list.filter(inSelection);
-    }
+function getPlaces() {
+    let list = getMapEvents(getVisibleEvents());
 
     let places = d3.rollups(list,
         group => ({
@@ -242,6 +252,48 @@ function getPlaces() {
     // the large places are drawn first so the small ones stay on top and can be hovered
     places.sort((a, b) => d3.descending(a.deaths, b.deaths));
     return { list, places };
+}
+
+// while playing: every place of the played years, with its deaths in each year, so the dots
+// can grow and shrink between the years instead of jumping
+function getPlayPlaces() {
+    let places = d3.rollups(getMapEvents(getTypeEvents()),
+        group => {
+            let byYear = d3.rollup(group, g => ({ deaths: d3.sum(g, d => d.deaths), events: g.length }), d => d.year);
+
+            return {
+                key: group[0].lat + "," + group[0].lon,
+                lat: group[0].lat,
+                lon: group[0].lon,
+                place: group[0].place,
+                state: group[0].state,
+                stateCode: group[0].stateCode,
+                byYear: byYear,
+                maxDeaths: d3.max(byYear.values(), d => d.deaths)
+            };
+        },
+        d => d.lat + "," + d.lon)
+        .map(d => d[1]);
+
+    places.sort((a, b) => d3.descending(a.maxDeaths, b.maxDeaths));
+    return places;
+}
+
+function deathsIn(place, year) {
+    let value = place.byYear.get(year);
+    return value === undefined ? 0 : value.deaths;
+}
+
+// the size of a dot at a fractional year of the play: the deaths of the nearest year, blended
+// into the next year in the middle of the way (eased, so the dot speeds up and slows down)
+function playRadius(place, position) {
+    let year = Math.floor(position),
+        t = (position - year - (1 - MORPH_SHARE) / 2) / MORPH_SHARE;
+
+    t = REDUCED_MOTION ? Math.round(position - year) : d3.easeCubicInOut(Math.max(0, Math.min(1, t)));
+
+    let deaths = deathsIn(place, year) * (1 - t) + deathsIn(place, year + 1) * t;
+    return placeRadius(deaths);
 }
 
 // the year that best describes when a place was active: the mean year of its events,
@@ -541,6 +593,54 @@ function zoomMap() {
 function updatePlaceMap() {
     let { list, places } = getPlaces();
 
+    if ( playTimer !== null ) {
+        updatePlayDots();
+    } else {
+        updateYearDots(places);
+    }
+
+    updatePlaceLegend(places);
+    updateCaption(list, places);
+}
+
+// while playing: a dot for every place of any year, sized by the frame of the player (see drawPlayFrame)
+function updatePlayDots() {
+    dotLayer.selectAll("circle")
+        .data(getPlayPlaces(), d => d.key)
+        .join(
+            enter => enter.append("circle")
+                .attr("class", "place")
+                .attr("cx", d => placePosition(d)[0])
+                .attr("cy", d => placePosition(d)[1])
+                .attr("r", 0),
+            update => update,
+            exit => exit.remove())
+            .on("mousemove", (e, d) => {
+                let year = d.byYear.get(startYear) || { deaths: 0, events: 0 };
+                showTooltip(e, d.place + ", " + d.state + ": " + formatNumber(year.deaths)
+                    + " deaths in " + formatNumber(year.events) + " events (" + startYear + ")");
+            })
+            .on("mouseout", hideTooltip)
+            .on("click", (e, d) => {
+                if ( selectedState === null ) {
+                    selectState(d.stateCode);
+                }
+            })
+            .order()
+            .style("transform", "scale(" + getDotScale() + ")")
+            .interrupt("size")
+            .attr("fill", getYearColor(startYear));
+
+    drawPlayFrame();
+}
+
+// sizes the dots for the current position of the player
+function drawPlayFrame() {
+    dotLayer.selectAll("circle").attr("r", d => playRadius(d, playPosition));
+}
+
+// the dots of the years of the slider, animated from what was there before
+function updateYearDots(places) {
     dotLayer.selectAll("circle")
         .data(places, d => d.key)
         .join(
@@ -568,9 +668,6 @@ function updatePlaceMap() {
         .transition("size").duration(transitionTime())
             .attr("r", d => placeRadius(d.deaths))
             .attr("fill", d => getYearColor(d.typicalYear));
-
-    updatePlaceLegend(places);
-    updateCaption(list, places);
 }
 
 function updatePlaceLegend(places) {
@@ -681,7 +778,7 @@ function getFocusEvents() {
 function jumpToFocusYears() {
     let years = getFocusEvents().map(d => d.year);
 
-    if ( singleYear || years.length === 0 ) {
+    if ( singleYear || playRange !== null || years.length === 0 ) {
         updateAll();
         return;
     }
@@ -697,6 +794,7 @@ export function showConflict(conflict, first, last, types) {
     let event = events.find(d => linkKey(d.sideA, d.sideB) === conflict);
 
     stopPlay();
+    playRange = null;
     hideTooltip();
     root.selectAll(".typeFilter input").property("checked", function() {
         return types.includes(this.value);
@@ -881,17 +979,21 @@ function updateModeSwitch() {
     });
 }
 
-// moves both handles, the dark fill between them and the label
+// moves both handles, the dark fill between them and the label.
+// While a range plays, the fill and the last handle stay on the range and the first handle
+// is the year being played
 function updateSliders() {
     let position = year => (year - minYear) / (maxYear - minYear);
-    let p0 = position(startYear),
-        p1 = position(endYear);
+    let [ first, last ] = playRange || [ startYear, endYear ];
+    let p0 = position(first),
+        p1 = position(last);
 
     d3.select("#startSlider").property("value", startYear);
-    d3.select("#endSlider").property("value", endYear).style("display", singleYear ? "none" : null);
+    d3.select("#endSlider").property("value", last).style("display", singleYear ? "none" : null);
 
     // the centre of a 20px handle goes from 10px to (width - 10px)
     root.select(".rangeFill")
+        .classed("playing", playRange !== null)
         .style("display", singleYear ? "none" : null)
         .style("left", "calc(10px + (100% - 20px) * " + p0 + ")")
         .style("width", "calc((100% - 20px) * " + (p1 - p0) + ")");
@@ -899,10 +1001,37 @@ function updateSliders() {
     // when the handles meet at the end, the first one goes on top so it can still be dragged back
     d3.select("#startSlider").style("z-index", startYear === maxYear ? 2 : null);
 
-    root.select(".yearLabel").text(formatYears([ startYear, endYear ]));
-    root.select(".yearRange").classed("oneHandle", singleYear);
-    root.select(".playButton").style("visibility", singleYear ? null : "hidden");
+    let label = root.select(".yearLabel").text(formatYears([ startYear, endYear ]));
+
+    if ( playRange !== null ) {
+        label.append("small").text((playTimer !== null ? "playing " : "paused in ") + formatYears(playRange));
+    }
+
+    root.select(".yearRange")
+        .classed("oneHandle", singleYear)
+        .classed("playingRange", playRange !== null);
     updateModeSwitch();
+    drawPlayProgress();
+}
+
+// the part of the playing range already played, darker on the fill
+function drawPlayProgress() {
+    if ( playRange === null ) {
+        return;
+    }
+
+    let position = playPosition === null ? startYear : playPosition,
+        share = (position - playRange[0]) / (playRange[1] - playRange[0]);
+
+    root.select(".rangeFill").style("--played", (share * 100) + "%");
+}
+
+// the slider goes back to the whole range that was playing
+function leaveRangePlay() {
+    if ( playRange !== null ) {
+        [ startYear, endYear ] = playRange;
+        playRange = null;
+    }
 }
 
 // also used by main.js, when the view is hidden
@@ -910,40 +1039,77 @@ export function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
+        playPosition = null;
         // back to whole years (only after playing: doing it on every call would undo
         // the user's drag before the slider is read)
         d3.select("#startSlider").attr("step", 1).property("value", startYear);
+        // the dots go back to the places of the year (a dot paused halfway settles on its year)
+        updatePlaceMap();
+        // a paused range says so in the label
+        updateSliders();
     }
     root.select(".playButton").text("Play");
 }
 
-// same player as View 1: the handle moves continuously and the views change at each whole year
+// at the end of a range the slider goes back to the whole range
+function finishPlay() {
+    let range = playRange;
+
+    stopPlay();
+    if ( range !== null ) {
+        leaveRangePlay();
+        setYears(range[0], range[1]);
+    }
+}
+
+// the handle moves continuously and the views change at each whole year (when the handle is
+// nearest to it); the dots grow and shrink in between. In Single mode it plays from the year
+// to the last year; in Range mode it plays the years of the range, one at a time, and the
+// slider keeps showing the range
 function togglePlay() {
     if ( playTimer !== null ) {
         stopPlay();
         return;
     }
 
-    if ( startYear === maxYear ) {
-        setYears(minYear, minYear);
+    let first, last;
+
+    if ( playRange !== null ) {
+        // paused in a range: goes on from the year (or starts the range again from its end)
+        first = startYear === playRange[1] ? playRange[0] : startYear;
+        last = playRange[1];
+    } else if ( !singleYear && startYear < endYear ) {
+        playRange = [ startYear, endYear ];
+        first = startYear;
+        last = endYear;
+    } else {
+        // Single mode, or a range of one year: from the year to the last year (or from the start)
+        singleYear = true;
+        first = startYear === maxYear ? minYear : startYear;
+        last = maxYear;
     }
 
-    let firstYear = startYear;
     let slider = d3.select("#startSlider").attr("step", "any");
 
     root.select(".playButton").text("Pause");
+    playPosition = first;
     playTimer = d3.timer(elapsed => {
-        let position = Math.min(maxYear, firstYear + elapsed / PLAY_SPEED);
+        playPosition = Math.min(last, first + elapsed / PLAY_SPEED);
 
-        if ( Math.floor(position) !== startYear ) {
-            setYears(Math.floor(position), Math.floor(position));
+        if ( Math.round(playPosition) !== startYear ) {
+            setYears(Math.round(playPosition), Math.round(playPosition));
         }
-        slider.property("value", position);
+        slider.property("value", playPosition);
+        drawPlayFrame();
+        drawPlayProgress();
 
-        if ( position >= maxYear ) {
-            stopPlay();
+        if ( playPosition >= last ) {
+            finishPlay();
         }
     });
+
+    // playing shows one year at a time
+    setYears(first, first);
 }
 
 function setupControls() {
@@ -955,11 +1121,14 @@ function setupControls() {
         // read the dragged year first: it can be fractional while playing
         let year = Math.round(+this.value);
         stopPlay();
+        leaveRangePlay();
         setYears(singleYear ? year : Math.min(year, endYear), endYear);
         this.value = startYear;
     });
 
     d3.select("#endSlider").on("input", function() {
+        stopPlay();
+        leaveRangePlay();
         setYears(startYear, Math.max(+this.value, startYear));
         this.value = endYear;
     });
@@ -970,6 +1139,7 @@ function setupControls() {
 
     root.selectAll(".controls .modeSwitch input").on("change", function() {
         stopPlay();
+        playRange = null;
         singleYear = this.value === "single";
 
         if ( singleYear ) {
@@ -1096,7 +1266,7 @@ function setupVis() {
         getAllEvents: () => events,
         getEvents: getTypeEvents,
         getPeriod: () => [ minYear, maxYear ],
-        getYears: () => ({ first: startYear, last: endYear, single: singleYear }),
+        getYears: () => ({ first: startYear, last: endYear, single: singleYear || playRange !== null }),
         onPick: pickGroups,
         getDataKey: () => getCheckedTypes().join() + "|" + selectedState,
         getScope: () => selectedState === null ? "" : getStateName(selectedState),
