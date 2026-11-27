@@ -1,7 +1,7 @@
 // View 2: network of the armed groups (who fought whom) next to a map of the places
 // of the selected conflict or group (where). Clicking a link or a group fills the map.
 // Pipeline: load data -> preprocess -> draw -> interaction.
-// Libraries: d3 v7 (global object d3), loaded in view2.html.
+// Libraries: d3 v7 (global object d3), loaded in index.html.
 
 let NET_WIDTH = 640,
     NET_HEIGHT = 520,
@@ -11,6 +11,9 @@ let NET_WIDTH = 640,
     TRANSITION_TIME = 500;
 
 // people who asked their system for less motion get the changes instantly
+// every view looks for its elements inside its own part of the page
+let root = d3.select("#view2");
+
 let REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // UCDP where_prec: 1-3 means the event has a municipality, 4 or more means only the state
@@ -88,19 +91,15 @@ function prepareEvents(rows) {
     });
 }
 
-Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
-    .then(([ geo, rows ]) => {
-        geoData = geo;
+// called by main.js when the data is loaded
+export function startView2(geo, rows) {
+    geoData = geo;
 
-        let all = prepareEvents(rows);
-        events = all.filter(d => d.precise);
-        impreciseEvents = all.filter(d => !d.precise);
-        setupVis();
-    })
-    .catch(err => {
-        console.log(err);
-        d3.select("#network").text("Could not load the data. Start a local server in this folder (python3 -m http.server) and open http://localhost:8000/view2.html");
-    });
+    let all = prepareEvents(rows);
+    events = all.filter(d => d.precise);
+    impreciseEvents = all.filter(d => !d.precise);
+    setupVis();
+}
 
 
 // ---------------------------------------------------------------- data for the current selection
@@ -108,7 +107,7 @@ Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
 function getCheckedTypes() {
     let checked = [];
 
-    d3.selectAll("#typeFilter input:checked").each(function() {
+    root.selectAll(".typeFilter input:checked").each(function() {
         checked.push(this.value);
     });
     return checked;
@@ -661,11 +660,13 @@ function getFocusEvents() {
 }
 
 // moves the slider to the years of the events in focus, so selecting a conflict or
-// zooming into a state always shows the whole period it was active
+// zooming into a state always shows the whole period it was active.
+// In single year mode the year stays where it is (and the player keeps going): the user is
+// watching the selection year by year, and selecting something must not take that mode away
 function jumpToFocusYears() {
     let years = getFocusEvents().map(d => d.year);
 
-    if ( years.length === 0 ) {
+    if ( singleYear || years.length === 0 ) {
         updateAll();
         return;
     }
@@ -745,7 +746,7 @@ function updateSliders() {
     d3.select("#endSlider").property("value", endYear).style("display", singleYear ? "none" : null);
 
     // the centre of a 20px handle goes from 10px to (width - 10px)
-    d3.select("#rangeFill")
+    root.select(".rangeFill")
         .style("display", singleYear ? "none" : null)
         .style("left", "calc(10px + (100% - 20px) * " + p0 + ")")
         .style("width", "calc((100% - 20px) * " + (p1 - p0) + ")");
@@ -753,11 +754,12 @@ function updateSliders() {
     // when the handles meet at the end, the first one goes on top so it can still be dragged back
     d3.select("#startSlider").style("z-index", startYear === maxYear ? 2 : null);
 
-    d3.select("#yearLabel").text(formatYears([ startYear, endYear ]));
-    d3.select("#playButton").style("display", singleYear ? null : "none");
+    root.select(".yearLabel").text(formatYears([ startYear, endYear ]));
+    root.select(".playButton").style("display", singleYear ? null : "none");
 }
 
-function stopPlay() {
+// also used by main.js, when the view is hidden
+export function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
@@ -765,7 +767,7 @@ function stopPlay() {
         // the user's drag before the slider is read)
         d3.select("#startSlider").attr("step", 1).property("value", startYear);
     }
-    d3.select("#playButton").text("Play");
+    root.select(".playButton").text("Play");
 }
 
 // same player as View 1: the handle moves continuously and the views change at each whole year
@@ -782,7 +784,7 @@ function togglePlay() {
     let firstYear = startYear;
     let slider = d3.select("#startSlider").attr("step", "any");
 
-    d3.select("#playButton").text("Pause");
+    root.select(".playButton").text("Pause");
     playTimer = d3.timer(elapsed => {
         let position = Math.min(maxYear, firstYear + elapsed / PLAY_SPEED);
 
@@ -815,8 +817,8 @@ function setupControls() {
         this.value = endYear;
     });
 
-    d3.select("#minYear").text(minYear);
-    d3.select("#maxYear").text(maxYear);
+    root.select(".minYear").text(minYear);
+    root.select(".maxYear").text(maxYear);
 
     d3.select("#singleYear").on("change", function() {
         stopPlay();
@@ -831,10 +833,10 @@ function setupControls() {
         }
     });
 
-    d3.select("#playButton").on("click", togglePlay);
+    root.select(".playButton").on("click", togglePlay);
     d3.select("#zoomOut").on("click", () => selectState(null));
     d3.select("#selectAll").on("click", () => select({ type: "all" }));
-    d3.selectAll("#typeFilter input").on("change", updateAll);
+    root.selectAll(".typeFilter input").on("change", updateAll);
 }
 
 function setupVis() {

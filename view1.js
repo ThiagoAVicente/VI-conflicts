@@ -1,6 +1,6 @@
 // View 1: map of Brazil coloured by the deaths in each state, one year at a time.
 // Pipeline: load data -> preprocess -> draw -> interaction.
-// Libraries: d3 v7 (global object d3), loaded in view1.html.
+// Libraries: d3 v7 (global object d3), loaded in index.html.
 
 let DEFAULT_YEAR = 2023,
     MAP_WIDTH = 620,
@@ -9,6 +9,9 @@ let DEFAULT_YEAR = 2023,
     TRANSITION_TIME = 500;
 
 // people who asked their system for less motion get the changes instantly
+// every view looks for its elements inside its own part of the page
+let root = d3.select("#view1");
+
 let REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // What the map shows: the deaths or the number of events of each state. The keys are also the
@@ -84,16 +87,12 @@ function prepareEvents(rows) {
     });
 }
 
-Promise.all([ d3.json("data/states.json"), d3.csv("data/brazil.csv") ])
-    .then(([ geo, rows ]) => {
-        geoData = geo;
-        events = prepareEvents(rows);
-        setupVis();
-    })
-    .catch(err => {
-        console.log(err);
-        d3.select("#map").text("Could not load the data. Start a local server in this folder (python3 -m http.server) and open http://localhost:8000/view1.html");
-    });
+// called by main.js when the data is loaded
+export function startView1(geo, rows) {
+    geoData = geo;
+    events = prepareEvents(rows);
+    setupVis();
+}
 
 
 // ---------------------------------------------------------------- data for the current selection
@@ -114,7 +113,7 @@ function setMetric(name) {
 function getCheckedTypes() {
     let checked = [];
 
-    d3.selectAll("#typeFilter input:checked").each(function() {
+    root.selectAll(".typeFilter input:checked").each(function() {
         checked.push(this.value);
     });
     return checked;
@@ -431,12 +430,13 @@ function hideTooltip() {
 function setYear(year) {
     selectedYear = Math.max(minYear, Math.min(maxYear, year));
     d3.select("#yearSlider").property("value", selectedYear);
-    d3.select("#yearLabel").text(compareMode ? getStartYear() + " vs " + getEndYear() : selectedYear);
+    root.select(".yearLabel").text(compareMode ? getStartYear() + " vs " + getEndYear() : selectedYear);
     updateFill();
     updateAll();
 }
 
-function stopPlay() {
+// also used by main.js, when the view is hidden
+export function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
@@ -444,7 +444,7 @@ function stopPlay() {
         // doing it on every call would undo the user's drag before the slider is read)
         d3.select("#yearSlider").attr("step", 1).property("value", selectedYear);
     }
-    d3.select("#playButton").text("Play");
+    root.select(".playButton").text("Play");
 }
 
 function togglePlay() {
@@ -462,7 +462,7 @@ function togglePlay() {
     let startYear = selectedYear;
     let slider = d3.select("#yearSlider").attr("step", "any");
 
-    d3.select("#playButton").text("Pause");
+    root.select(".playButton").text("Pause");
     playTimer = d3.timer(elapsed => {
         let position = Math.min(maxYear, startYear + elapsed / PLAY_SPEED);
 
@@ -489,14 +489,14 @@ function setupControls() {
             setYear(year);
         });
 
-    d3.select("#minYear").text(minYear);
-    d3.select("#maxYear").text(maxYear);
+    root.select(".minYear").text(minYear);
+    root.select(".maxYear").text(maxYear);
 
     d3.select("#prevButton").on("click", () => { stopPlay(); setYear(selectedYear - 1); });
     d3.select("#nextButton").on("click", () => { stopPlay(); setYear(selectedYear + 1); });
-    d3.select("#playButton").on("click", togglePlay);
+    root.select(".playButton").on("click", togglePlay);
 
-    d3.selectAll("#typeFilter input").on("change", updateAll);
+    root.selectAll(".typeFilter input").on("change", updateAll);
 
     setupCompare();
 
@@ -514,7 +514,7 @@ function setupCompare() {
         .attr("max", maxYear)
         .on("input", function() {
             baseYear = Math.round(+this.value);
-            d3.select("#yearLabel").text(getStartYear() + " vs " + getEndYear());
+            root.select(".yearLabel").text(getStartYear() + " vs " + getEndYear());
             updateFill();
             updateAll();
         });
@@ -526,7 +526,7 @@ function setupCompare() {
 
         stopPlay();
         d3.select("#baseSlider").property("hidden", !compareMode).property("value", baseYear);
-        d3.select("#yearRange").classed("comparing", compareMode);
+        root.select(".yearRange").classed("comparing", compareMode);
         setYear(selectedYear);
     });
 }
@@ -535,7 +535,7 @@ function setupCompare() {
 // (the playhead can be between two years while playing); only in compare mode
 function updateFill(year = selectedYear) {
     if ( !compareMode ) {
-        d3.select("#rangeFill").style("display", "none");
+        root.select(".rangeFill").style("display", "none");
         return;
     }
 
@@ -544,7 +544,7 @@ function updateFill(year = selectedYear) {
         last = Math.max(baseYear, year);
 
     // the centre of a 20px handle goes from 10px to (width - 10px)
-    d3.select("#rangeFill")
+    root.select(".rangeFill")
         .style("display", null)
         .style("left", "calc(10px + (100% - 20px) * " + position(first) + ")")
         .style("width", "calc((100% - 20px) * " + (position(last) - position(first)) + ")");

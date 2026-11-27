@@ -110,7 +110,7 @@ aside {
     font-size: 14px;
 }
 
-#typeFilter {
+.typeFilter {
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -170,14 +170,14 @@ aside {
     background: #256abf;
 }
 
-#controls {
+.controls {
     display: flex;
     align-items: center;
     gap: 10px;
     padding-top: 12px;
 }
 
-#controls button {
+.controls button {
     padding: 6px 12px;
     font-size: 14px;
     cursor: pointer;
@@ -221,7 +221,7 @@ aside {
     font-weight: 400;
 }
 
-#yearLabel {
+.yearLabel {
     min-width: 128px;
     text-align: right;
     font-size: 20px;
@@ -334,11 +334,9 @@ aside {
     flex-wrap: wrap;
 }
 
-#typeFilter.inline {
-    flex-direction: row;
-    align-items: center;
-    gap: 16px;
-    margin: 4px 0 12px;
+/* the same filter box as View 1, at the right of the title */
+.headerRow .typeFilter {
+    margin: 4px 0 8px;
 }
 
 .viewArea {
@@ -537,7 +535,7 @@ aside {
 }
 
 /* two range inputs on top of each other: only the handles take the mouse */
-#yearRange {
+.yearRange {
     position: relative;
     flex: 1;
     height: 20px;
@@ -553,14 +551,14 @@ aside {
     background: #d8d7d2;
 }
 
-#rangeFill {
+.rangeFill {
     position: absolute;
     top: 0;
     height: 6px;
     background: #55554f;
 }
 
-#yearRange input {
+.yearRange input {
     position: absolute;
     left: 0;
     top: 0;
@@ -573,12 +571,12 @@ aside {
     appearance: none;
 }
 
-#yearRange input::-webkit-slider-runnable-track {
+.yearRange input::-webkit-slider-runnable-track {
     height: 20px;
     background: transparent;
 }
 
-#yearRange input::-webkit-slider-thumb {
+.yearRange input::-webkit-slider-thumb {
     -webkit-appearance: none;
     pointer-events: auto;
     box-sizing: border-box;
@@ -591,15 +589,15 @@ aside {
 }
 
 /* Firefox paints the part before the handle by default, this removes it */
-#yearRange input::-moz-range-progress {
+.yearRange input::-moz-range-progress {
     background: transparent;
 }
 
-#yearRange input::-moz-range-track {
+.yearRange input::-moz-range-track {
     background: transparent;
 }
 
-#yearRange input::-moz-range-thumb {
+.yearRange input::-moz-range-thumb {
     pointer-events: auto;
     box-sizing: border-box;
     width: 20px;
@@ -610,12 +608,12 @@ aside {
     cursor: grab;
 }
 
-#controls label {
+.controls label {
     white-space: nowrap;
     font-size: 14px;
 }
 
-#yearLabel.range {
+.yearLabel.range {
     min-width: 96px;
 }
 
@@ -651,11 +649,23 @@ aside {
 
 /* View 1: the fill between the two handles of the compare mode is black, and a single handle
    can be moved by clicking anywhere on the track (with two handles only the handles take the mouse) */
-.compareRange #rangeFill {
+.compareRange .rangeFill {
     background: #1a1a19;
 }
 
-#yearRange:not(.comparing) #yearSlider {
+.yearRange:not(.comparing) #yearSlider {
     pointer-events: auto;
     cursor: pointer;
+}
+
+/* the two views are in the same page, one at a time; each takes the place the page had before */
+.viewPage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.viewPage[hidden] {
+    display: none;
 }

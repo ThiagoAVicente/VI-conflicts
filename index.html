@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Conflicts in Brazil</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!--
+        Used for loading the data, the map projection (d3.geoPath), the force layout of the
+        network (d3.forceSimulation), the scales and the DOM updates. It uses the global object d3.
+    -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <nav class="navbar" aria-label="Views">
+        <span class="navBrand">Organised violence in Brazil</span>
+        <ul>
+            <li><a href="#map" aria-current="page"><span class="navNumber">1</span> Map <small>where and when</small></a></li>
+            <li><a href="#network"><span class="navNumber">2</span> Network <small>who fought whom, and where</small></a></li>
+        </ul>
+    </nav>
+
+    <!-- the two views share the page; main.js shows one at a time -->
+    <div id="view1" class="viewPage">
+            <header>
+                <h1>Conflicts in Brazil</h1>
+                <p id="subtitle"></p>
+            </header>
+
+            <main>
+                <section id="mapArea">
+                    <div id="map"></div>
+                    <div id="legend"></div>
+                </section>
+
+                <aside>
+                    <label id="metricPicker">Show on the map
+                        <select id="metricSelect">
+                            <option value="deaths">Deaths</option>
+                            <option value="events">Events</option>
+                        </select>
+                    </label>
+
+                    <fieldset class="typeFilter">
+                        <legend>Type of event</legend>
+                        <label><input type="checkbox" value="faction" checked> Faction vs faction</label>
+                        <label><input type="checkbox" value="civilians" checked> Attacks on civilians</label>
+                    </fieldset>
+
+                    <div id="panel">
+                        <div class="panelHeader">
+                            <h2 id="panelName"></h2>
+                            <span id="panelYear"></span>
+                        </div>
+                        <p id="panelNumbers"><span id="panelDeaths">0</span> deaths, <span id="panelEvents">0</span> events</p>
+                        <p id="panelCompare"></p>
+                        <h3 id="conflictTitle">Main conflicts</h3>
+                        <div id="conflictList"></div>
+                        <p id="panelHint">Click a state on the map to see its details. Click it again to go back to Brazil.</p>
+                    </div>
+                </aside>
+            </main>
+
+            <section class="controls">
+                <button id="prevButton" aria-label="Previous year">&lsaquo; Prev</button>
+                <button aria-label="Play through the years" class="playButton">Play</button>
+                <button id="nextButton" aria-label="Next year">Next &rsaquo;</button>
+                <label id="compareLabel"><input type="checkbox" id="compareToggle"> Compare years</label>
+                <span class="minYear"></span>
+                <div class="yearRange compareRange">
+                    <div class="rangeTrack"><div class="rangeFill"></div></div>
+                    <input id="baseSlider" type="range" step="1" aria-label="Year to compare with" hidden>
+                    <input id="yearSlider" type="range" step="1" aria-label="Year">
+                </div>
+                <span class="maxYear"></span>
+                <strong class="yearLabel"></strong>
+            </section>
+
+    
+    </div>
+
+    <div id="view2" class="viewPage" hidden>
+            <header>
+                <div class="headerRow">
+                    <div>
+                        <h1>Armed groups in Brazil: conflicts and places</h1>
+                        <p>Who fought whom, and where. Source: UCDP GED, Brazil events with an exact place, 1993-2025.</p>
+                    </div>
+                    <fieldset class="typeFilter">
+                        <legend>Type of event</legend>
+                        <label><input type="checkbox" value="faction" checked> Faction vs faction</label>
+                        <label><input type="checkbox" value="civilians" checked> Attacks on civilians</label>
+                    </fieldset>
+                </div>
+            </header>
+
+            <main>
+                <section id="netArea" class="viewArea">
+                    <div class="areaTitle">
+                        <h2 id="networkTitle"></h2>
+                        <button id="selectAll" aria-pressed="false" aria-label="Select every conflict and group in the network">Select all</button>
+                    </div>
+                    <div id="network" class="frame"></div>
+                    <div class="legendRow">
+                        <span><svg width="34" height="10"><line x1="0" x2="34" y1="5" y2="5" class="legendLine"/></svg> faction vs faction</span>
+                        <span><svg width="34" height="10"><line x1="0" x2="34" y1="5" y2="5" class="legendLine civilians"/></svg> attacks on civilians</span>
+                        <span>line width and circle size = deaths</span>
+                    </div>
+                </section>
+
+                <section id="placeArea" class="viewArea">
+                    <div class="areaTitle">
+                        <h2 id="mapTitle"></h2>
+                        <button id="zoomOut" aria-label="Zoom out to the whole country">Back to Brazil</button>
+                    </div>
+                    <div id="placeMap" class="frame"></div>
+                    <div class="legendRow" id="placeLegend"></div>
+                    <div id="caption">
+                        <p id="captionTitle"></p>
+                        <p id="captionNumbers"></p>
+                        <p id="captionNote"></p>
+                    </div>
+                </section>
+            </main>
+
+            <section class="controls">
+                <label><input type="checkbox" id="singleYear"> Single year</label>
+                <button aria-label="Play through the years" class="playButton">Play</button>
+                <span class="minYear"></span>
+                <div class="yearRange">
+                    <div class="rangeTrack"><div class="rangeFill"></div></div>
+                    <input id="startSlider" type="range" step="1" aria-label="First year">
+                    <input id="endSlider" type="range" step="1" aria-label="Last year">
+                </div>
+                <span class="maxYear"></span>
+                <strong class="yearLabel range"></strong>
+            </section>
+
+    
+    </div>
+
+    <div id="tooltip"></div>
+
+    <!-- main.js loads the data once and starts view1.js and view2.js (ES modules) -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>
