@@ -332,7 +332,7 @@ aside {
 .mapLegend .changeLegend {
     position: relative;
     display: block;
-    width: 260px;
+    width: 330px;
     height: 34px;
     margin: 0 24px 0 28px;
     align-self: flex-start;
@@ -639,7 +639,8 @@ aside {
 }
 
 .place {
-    fill-opacity: 0.8;
+    /* where many places are close (the north-east coast) the dots show through each other */
+    fill-opacity: 0.55;
     stroke: #1a1a19;
     stroke-width: 0.8;
     /* the zoom scales the dot around its centre, the border keeps its width */
@@ -1531,4 +1532,149 @@ aside {
 
 .hmRow.linked .hmName {
     font-weight: 700;
+}
+
+/* ---------------------------------------------------------------- narrow screens (phones) */
+
+/* the views are one column that the page scrolls: no fixed heights, so nothing overlaps */
+@media (max-width: 800px) {
+    body {
+        padding: 12px 16px;
+    }
+
+    #view1,
+    #view2 {
+        margin: 0 -16px -12px;
+        padding: 0 16px 12px;
+    }
+
+    #view1 main,
+    #view2 main {
+        flex: none;
+    }
+
+    #view1 main {
+        min-height: 0;
+    }
+
+    /* the map of View 1 has its panel under it */
+    #mapArea {
+        flex: none;
+    }
+
+    aside {
+        overflow-y: visible;
+    }
+
+    /* the years: the mode and play on the first row, the slider on the whole width under them */
+    .controls {
+        flex-wrap: wrap;
+        row-gap: 8px;
+    }
+
+    .controls .modeSwitch {
+        width: auto;
+        flex: 1 1 auto;
+    }
+
+    .controls .yearRange {
+        order: 5;
+        flex: 1 1 140px;
+    }
+
+    /* the legend wraps in more rows on a phone */
+    .mapLegend {
+        height: auto;
+    }
+
+    /* the first and last year are not written on a phone: the year label says the years shown */
+    .controls .minYear,
+    .controls .maxYear {
+        display: none;
+    }
+
+    .controls .yearLabel {
+        order: 7;
+        flex: 1 0 100%;
+        margin: 0;
+    }
+
+    .headerRow {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    .areaTitle {
+        flex-wrap: wrap;
+        gap: 6px 8px;
+    }
+
+    .groupSearch {
+        flex: 1 1 100%;
+        order: 5;
+    }
+
+    #network,
+    #placeMap {
+        height: 60vh;
+        flex: none;
+    }
+
+    .compare {
+        height: auto;
+    }
+
+    .compareBody {
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .groupPicker {
+        flex: none;
+        max-height: 220px;
+    }
+
+    .compareMain {
+        min-height: 300px;
+    }
+
+    .heatmapHead,
+    .stateCompareHead,
+    .compareHead {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .heatmapControls {
+        flex-wrap: wrap;
+    }
+
+    .modeSwitch {
+        max-width: 100%;
+    }
+}
+
+/* "Reset all" at the end of the navbar */
+.navbar {
+    justify-content: flex-start;
+}
+
+.navbar ul {
+    margin-left: auto;
+}
+
+.resetAll {
+    align-self: center;
+    margin-left: 16px;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.netNote {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #77776f;
 }

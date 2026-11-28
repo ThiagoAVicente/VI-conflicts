@@ -17,7 +17,7 @@ let REGIONS = [
 let ROW_HEIGHTS = [ { states: 5, height: 30 }, { states: 10, height: 22 }, { states: Infinity, height: 16 } ],
     // in the order by region, each region starts with its name, in this gap
     REGION_GAP = 20,
-    MARGIN = { top: 22, right: 76, bottom: 4, left: 150 },
+    MARGIN = { top: 22, right: 94, bottom: 4, left: 150 },
     // the columns share the width of the page, up to this width (one or two years stay a column, not a band)
     MAX_STEP = 120,
     // a cell this big has room for its number: with few years and states the heatmap is also a table

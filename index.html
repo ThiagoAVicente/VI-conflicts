@@ -19,6 +19,7 @@
             <li><a href="#states" aria-current="page"><span class="navNumber">1</span> States <small>deaths by state, year by year</small></a></li>
             <li><a href="#groups"><span class="navNumber">2</span> Groups <small>who fought whom, and where</small></a></li>
         </ul>
+        <button id="resetAll" class="resetAll" title="Back to the first state of the page: years, filters, selections and graph">Reset all</button>
     </nav>
 
     <!-- the two views share the page; main.js shows one at a time -->
@@ -160,6 +161,7 @@
                         <span><svg width="34" height="10"><line x1="0" x2="34" y1="5" y2="5" class="legendLine civilians"/></svg> attacks on civilians</span>
                         <span>line width and circle size = deaths</span>
                     </div>
+                    <p class="netNote">Groups are named as UCDP records them. Some are small local gangs whose names look like countries (Estados Unidos, Holanda), and a few were coded from a single event.</p>
                 </section>
 
                 <section id="placeArea" class="viewArea">

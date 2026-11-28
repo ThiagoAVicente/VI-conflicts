@@ -177,7 +177,10 @@ function buildGraph() {
         .map(d => d[1]);
 
     // the numbers of a group count all its conflicts, not only the ones with the groups of the graph
-    let nodes = graphGroups.map(name => {
+    // (zoomed into a state, the groups without events there are left out, so no name is left alone
+    // on the graph; they come back with Back to Brazil)
+    let shown = graphGroups.filter(name => selectedState === null || visible.some(d => d.sideA === name || d.sideB === name));
+    let nodes = shown.map(name => {
         if ( !nodeById.has(name) ) {
             nodeById.set(name, newNode(name));
         }
@@ -787,9 +790,13 @@ function updateCaption(list, places) {
     let numbers = "";
 
     if ( graphGroups.length > 0 ) {
+        // the groups that really fought here (in these years and types), not only the ones in the graph
+        let active = new Set(list.flatMap(d => [ d.sideA, d.sideB ])).size;
+
         title = graphGroups.length === 1 ? "Add another group to see the conflicts between them"
             : "Conflicts between " + (graphGroups.length <= 4 ? graphGroups.map(shortName).join(", ")
-                : formatNumber(graphGroups.length) + " groups") + where;
+                : formatNumber(active) + " groups" + where
+                    + (active < graphGroups.length ? " (" + formatNumber(graphGroups.length) + " in the graph)" : ""));
     } else if ( stateName !== null ) {
         title = "Add groups to the graph to see where they fought in " + stateName;
     }
@@ -964,7 +971,9 @@ function selectState(stateCode) {
 
     hideTooltip();
     zoomMap();
-    jumpToFocusYears();
+
+    // the slider stays where the user put it
+    updateAll();
 }
 
 function getStateName(stateCode) {

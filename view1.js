@@ -995,6 +995,8 @@ function setupVis() {
         getEvents: getTypeEvents,
         getYears: () => [ minYear, maxYear ],
         getTimeline: () => [ getStartYear(), getEndYear() ],
+        getFullTimeline: () => [ minYear, maxYear ],
+        isCompare: isCompare,
         getShownMetrics: getShownMetrics,
         getName: getStateName,
         formatNumber: formatNumber,

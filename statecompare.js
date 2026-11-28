@@ -64,7 +64,10 @@ export function createStateCompare(root, source) {
         }));
 
         drawLegend(states);
-        section.select(".stateCompareNote").text(cumulative ? "Added up from " + source.getTimeline()[0] + "." : "Year by year.");
+        let [ firstYear, lastYear ] = source.getTimeline();
+
+        section.select(".stateCompareNote").text(!cumulative ? "Year by year."
+            : firstYear === lastYear ? "Added up from " + source.getFullTimeline()[0] + ", the selected year is marked." : "Added up from " + firstYear + ".");
 
         // the charts are drawn again: the height stays while they are, so the page does not shrink and
         // jump back up (measuring the width in between makes the browser lay the page out)
@@ -99,8 +102,16 @@ export function createStateCompare(root, source) {
     }
 
     function drawChart(states, metric) {
-        let [ first, last ] = source.getTimeline(),
-            years = d3.range(first, last + 1);
+        let [ first, last ] = source.getTimeline();
+
+        // one year alone has no line: the chart shows every year and marks the selected one
+        let markedYear = first === last ? first : null;
+
+        if ( markedYear !== null ) {
+            [ first, last ] = source.getFullTimeline();
+        }
+
+        let years = d3.range(first, last + 1);
 
         let picked = states.map(state => {
             let byYear = d3.group(state.events, d => d.year);
@@ -142,7 +153,7 @@ export function createStateCompare(root, source) {
             base = CHART_HEIGHT - CHART_MARGIN.bottom;
 
         // one year has no width: it goes in the middle
-        let x = d3.scaleLinear().domain(first === last ? [ first - 1, last + 1 ] : [ first, last ]).range([ left, right ]),
+        let x = d3.scaleLinear().domain([ first, last ]).range([ left, right ]),
             y = d3.scaleLinear()
                 .domain([ 0, d3.max(series, s => d3.max(s.values, d => d.value)) || 1 ])
                 .nice(4)
@@ -172,16 +183,35 @@ export function createStateCompare(root, source) {
                 .attr("stroke-width", 2)
                 .attr("stroke-linejoin", "round");
 
-        // one year draws no line: a dot for each state
-        if ( years.length === 1 ) {
-            svg.append("g").selectAll("circle")
+        // the selected years (one in Single mode, two in Compare mode): a vertical line,
+        // a dot on each line and the year on top
+        let marked = markedYear !== null ? [ markedYear ] : source.isCompare() ? [ first, last ] : [];
+
+        marked.forEach(year => {
+            let mark = svg.append("g").attr("class", "yearMark");
+            let i = year - first;
+
+            mark.append("line")
+                .attr("x1", x(year)).attr("x2", x(year))
+                .attr("y1", top).attr("y2", base)
+                .attr("stroke", INK).attr("stroke-width", 1).attr("stroke-dasharray", "2 3").attr("opacity", 0.5);
+            mark.selectAll("circle")
                 .data(series)
                 .join("circle")
-                    .attr("cx", x(first))
-                    .attr("cy", d => y(d.values[0].value))
-                    .attr("r", 4)
-                    .attr("fill", d => d.state.color);
-        }
+                    .attr("cx", x(year))
+                    .attr("cy", d => y(d.values[i].value))
+                    .attr("r", 4.5)
+                    .attr("fill", d => d.state.color)
+                    .attr("stroke", "#fcfcfb")
+                    .attr("stroke-width", 2);
+            mark.append("text")
+                .attr("x", x(year))
+                .attr("y", top - 4)
+                .attr("text-anchor", year === last && marked.length > 1 ? "end" : year === first && marked.length > 1 ? "start" : "middle")
+                .attr("font-size", 11)
+                .attr("fill", INK)
+                .text(year);
+        });
 
         // the hovered year: a vertical line, a dot on each line and every value in the tooltip
         let hover = svg.append("g").style("display", "none");

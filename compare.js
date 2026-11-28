@@ -476,7 +476,7 @@ export function createCompare(root, source) {
         svg.append("rect")
             .attr("x", box.left)
             .attr("y", box.top)
-            .attr("width", box.right - box.left)
+            .attr("width", Math.max(0, box.right - box.left))
             .attr("height", box.bottom - box.top)
             .attr("fill", "transparent")
             .on("pointermove", e => {

@@ -35,6 +35,9 @@ function showView() {
 showView();
 window.addEventListener("hashchange", showView);
 
+// every view goes back to how it was when the page was opened (the address, and so the view, stays)
+d3.select("#resetAll").on("click", () => location.reload());
+
 // a button at the bottom tells that the views scroll
 VIEWS.forEach(d => createScrollHint(document.getElementById(d.id)));
 
