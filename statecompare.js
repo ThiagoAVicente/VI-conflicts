@@ -1,5 +1,6 @@
 // View 1: the comparison of the selected states (a click on the map adds a state), under the slider.
-// One line chart for each metric shown: a line for each selected state, every year, on the same scale.
+// One line chart for each metric shown: a line for each selected state, on the same scale, over the years
+// of the slider (from its first to its last year; with one year, a dot for each state).
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
 // colours of the compared states, in the order they are picked. The blue and the orange (the hues of the
@@ -13,13 +14,12 @@ let TOTAL = { name: "Total", color: "#1a1a19", dashed: true };
 
 let CHART_HEIGHT = 220,
     CHART_MARGIN = { top: 14, right: 16, bottom: 24, left: 42 },
-    INK = "#1a1a19",
-    BAND = "#d8d7d2";
+    INK = "#1a1a19";
 
 // source: what View 1 knows
 //   getEvents()       the events of the checked types, in every year
 //   getYears()        [ first, last ] year of the data
-//   getShownYears()   [ first, last ] year of the slider
+//   getTimeline()     [ first, last ] year of the slider (in compare mode, the years in between too)
 //   getShownMetrics() the metrics ticked in the view (deaths and/or events)
 //   getName(code), getColor(code), formatNumber, moveTooltip, hideTooltip, onRemove(code)
 export function createStateCompare(root, source) {
@@ -64,7 +64,7 @@ export function createStateCompare(root, source) {
         }));
 
         drawLegend(states);
-        section.select(".stateCompareNote").text(cumulative ? "Added up from " + source.getYears()[0] + "." : "Year by year.");
+        section.select(".stateCompareNote").text(cumulative ? "Added up from " + source.getTimeline()[0] + "." : "Year by year.");
 
         // the charts are drawn again: the height stays while they are, so the page does not shrink and
         // jump back up (measuring the width in between makes the browser lay the page out)
@@ -93,8 +93,7 @@ export function createStateCompare(root, source) {
     }
 
     function drawChart(states, metric) {
-        let [ first, last ] = source.getYears(),
-            [ from, to ] = source.getShownYears(),
+        let [ first, last ] = source.getTimeline(),
             years = d3.range(first, last + 1);
 
         let picked = states.map(state => {
@@ -136,25 +135,12 @@ export function createStateCompare(root, source) {
             top = CHART_MARGIN.top,
             base = CHART_HEIGHT - CHART_MARGIN.bottom;
 
-        let x = d3.scaleLinear().domain([ first, last ]).range([ left, right ]),
+        // one year has no width: it goes in the middle
+        let x = d3.scaleLinear().domain(first === last ? [ first - 1, last + 1 ] : [ first, last ]).range([ left, right ]),
             y = d3.scaleLinear()
                 .domain([ 0, d3.max(series, s => d3.max(s.values, d => d.value)) || 1 ])
                 .nice(4)
                 .range([ base, top ]);
-
-        // the years of the slider: a band, or a line for one year (nothing when it is every year)
-        if ( from === to ) {
-            svg.append("line")
-                .attr("x1", x(from)).attr("x2", x(from))
-                .attr("y1", top).attr("y2", base)
-                .attr("stroke", INK).attr("stroke-width", 1.5).attr("opacity", 0.55);
-        } else if ( from !== first || to !== last ) {
-            svg.append("rect")
-                .attr("x", x(from)).attr("y", top)
-                .attr("width", Math.max(2, x(to) - x(from)))
-                .attr("height", base - top)
-                .attr("fill", BAND).attr("opacity", 0.5);
-        }
 
         // light grid with the numbers on the left, like the bar charts of the details
         svg.append("g")
@@ -165,7 +151,7 @@ export function createStateCompare(root, source) {
         svg.append("g")
             .attr("class", "trendAxis")
             .attr("transform", "translate(0," + base + ")")
-            .call(d3.axisBottom(x).tickValues(years.filter(year => year % 5 === 0)).tickFormat(d3.format("d")).tickSize(3).tickPadding(5));
+            .call(d3.axisBottom(x).tickValues(getTicks(years, right - left)).tickFormat(d3.format("d")).tickSize(3).tickPadding(5));
 
         let line = d3.line().x(d => x(d.year)).y(d => y(d.value));
 
@@ -178,6 +164,17 @@ export function createStateCompare(root, source) {
                 .attr("stroke-dasharray", d => d.state.dashed ? "6 4" : null)
                 .attr("stroke-width", 2)
                 .attr("stroke-linejoin", "round");
+
+        // one year draws no line: a dot for each state
+        if ( years.length === 1 ) {
+            svg.append("g").selectAll("circle")
+                .data(series)
+                .join("circle")
+                    .attr("cx", x(first))
+                    .attr("cy", d => y(d.values[0].value))
+                    .attr("r", 4)
+                    .attr("fill", d => d.state.color);
+        }
 
         // the hovered year: a vertical line, a dot on each line and every value in the tooltip
         let hover = svg.append("g").style("display", "none");
@@ -222,6 +219,13 @@ export function createStateCompare(root, source) {
                 hover.style("display", "none");
                 source.hideTooltip();
             });
+    }
+
+    // every year when there is room (about 36px each), otherwise every 2nd, 5th or 10th year
+    function getTicks(years, width) {
+        let every = [ 1, 2, 5, 10 ].find(n => width / years.length * n >= 36) || 10;
+
+        return years.filter(year => year % every === 0 || years.length === 1);
     }
 
     return { update };

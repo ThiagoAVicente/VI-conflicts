@@ -3,8 +3,8 @@
 // Pipeline: load data -> preprocess -> draw -> interaction.
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
-let NET_WIDTH = 720,
-    NET_HEIGHT = 640,
+let NET_WIDTH = 640,
+    NET_HEIGHT = 520,
     MAP_WIDTH = 620,
     MAP_HEIGHT = 600,
     PLAY_SPEED = 900,
@@ -63,7 +63,6 @@ let simulation,
     linkLayer,
     hitLayer,
     nodeLayer,
-    nameLayer,
     dotLayer,
     labelLayer,
     statePaths,
@@ -259,8 +258,6 @@ function drawNetwork() {
     linkLayer = svg.append("g");
     hitLayer = svg.append("g");
     nodeLayer = svg.append("g");
-    // the names are above every circle and line
-    nameLayer = svg.append("g").style("pointer-events", "none");
 
     simulation = d3.forceSimulation()
         // the link length counts the size of both circles, so two large groups do not touch
@@ -287,17 +284,12 @@ function getBox(d) {
     };
 }
 
-// keeps the groups inside the frame and pushes apart those whose boxes overlap, along the axis with less overlap
+// pushes apart the groups whose boxes overlap, along the axis with less overlap
 function boxCollide() {
     let nodes = [];
 
     function force() {
-        nodes.forEach(d => {
-            d.x = Math.max(d.r + 4, Math.min(NET_WIDTH - d.r - 4, d.x));
-            d.y = Math.max(d.r + 4, Math.min(NET_HEIGHT - d.r - 4, d.y));
-        });
-
-        for ( let pass = 0; pass < 4; pass++ ) {
+        for ( let pass = 0; pass < 3; pass++ ) {
             for ( let i = 0; i < nodes.length; i++ ) {
                 for ( let j = i + 1; j < nodes.length; j++ ) {
                     let a = getBox(nodes[i]),
@@ -382,35 +374,18 @@ function updateNetwork() {
                 .attr("class", "node selected")
                 .call(dragNode)
                 .on("click", (e, d) => removeGroup(d.id))
-                .on("mouseover", (e, d) => highlight(d))
                 .on("mousemove", (e, d) => showTooltip(e, d.id + ": " + formatNumber(d.deaths) + " deaths in "
                     + d.conflicts + (d.conflicts === 1 ? " conflict" : " conflicts") + ". Click to take it out"))
-                .on("mouseout", () => {
-                    hideTooltip();
-                    highlight(null);
-                });
+                .on("mouseout", hideTooltip);
             g.append("circle").attr("r", 0);
+            g.append("text").attr("y", 4).text(d => shortName(d.id));
             return g;
         })
         .select("circle").transition("size").duration(transitionTime())
             .attr("r", d => d.r);
 
-    nameLayer.selectAll("text")
-        .data(nodes, d => d.id)
-        .join("text")
-            .attr("class", "nodeName")
-            .attr("dy", 4)
-            .text(d => shortName(d.id));
-
-    simulation.alpha(0.8).restart();
+    simulation.alpha(0.5).restart();
     paintNetwork();
-}
-
-// hovering a group: its links are drawn dark and the others fade, so its conflicts can be followed
-function highlight(node) {
-    linkLayer.selectAll("line")
-        .classed("hot", d => node !== null && (d.source === node || d.target === node))
-        .classed("dimmed", d => node !== null && d.source !== node && d.target !== node);
 }
 
 // moves the lines and the groups to the positions computed by the simulation
@@ -431,11 +406,10 @@ function paintNetwork() {
     let groups = nodeLayer.selectAll("g.node")
         .attr("transform", d => "translate(" + d.x + "," + d.y + ")");
 
-    // names on the right of the circle, or on the left near the right edge
-    nameLayer.selectAll("text")
+    // labels on the right of the circle, or on the left near the right edge
+    groups.select("text")
         .attr("text-anchor", d => d.x > NET_WIDTH * 0.6 ? "end" : "start")
-        .attr("x", d => d.x + (d.x > NET_WIDTH * 0.6 ? -(d.r + 4) : d.r + 4))
-        .attr("y", d => d.y);
+        .attr("x", d => d.x > NET_WIDTH * 0.6 ? -(d.r + 4) : d.r + 4);
 }
 
 function drawPlaceMap() {
@@ -597,11 +571,10 @@ function updateCaption(list, places) {
     let title = "Add groups to the graph with the search box (or Add all) to see where they fought. Click a state on the map to zoom into it.";
     let numbers = "";
 
-    if ( graphGroups.length === 1 ) {
-        title = "Add another group to see the conflicts between them";
-    } else if ( graphGroups.length > 1 ) {
-        title = "Conflicts between " + (graphGroups.length <= 4 ? graphGroups.map(shortName).join(", ")
-            : formatNumber(graphGroups.length) + " groups") + where;
+    if ( graphGroups.length > 0 ) {
+        title = graphGroups.length === 1 ? "Add another group to see the conflicts between them"
+            : "Conflicts between " + (graphGroups.length <= 4 ? graphGroups.map(shortName).join(", ")
+                : formatNumber(graphGroups.length) + " groups") + where;
     } else if ( stateName !== null ) {
         title = "Add groups to the graph to see where they fought in " + stateName;
     }
@@ -1019,7 +992,6 @@ function setupVis() {
         getScope: () => selectedState === null ? "" : getStateName(selectedState),
         shortName: shortName
     });
-
     zoomMap();
 
     // starts with nothing selected, in all the years

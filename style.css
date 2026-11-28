@@ -839,6 +839,35 @@ aside {
     cursor: pointer;
 }
 
+/* View 2, while a range plays: the range turns blue, the part already played dark blue,
+   and the handle of the year being played is blue too */
+.rangeFill.playing {
+    background: linear-gradient(to right, #0d366b var(--played, 0%), #9ec5f4 var(--played, 0%));
+}
+
+.yearRange.playingRange .mainSlider::-webkit-slider-thumb {
+    background: #256abf;
+}
+
+.yearRange.playingRange .mainSlider::-moz-range-thumb {
+    background: #256abf;
+}
+
+/* under the year, without making the row taller (so the page does not jump when playing starts) */
+.yearLabel {
+    position: relative;
+}
+
+.yearLabel small {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 400;
+    color: #256abf;
+}
+
 /* the two views are in the same page, one at a time; each takes the place the page had before */
 .viewPage {
     flex: 1;
@@ -1200,4 +1229,158 @@ aside {
 #view2 {
     margin: 0 -24px -16px;
     padding: 0 24px 16px;
+}
+
+/* ---------------------------------------------------------------- View 1: the heatmap of every state and year */
+
+.heatmap {
+    padding: 14px 0 12px;
+}
+
+.heatmapHead {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 24px;
+}
+
+.heatmapHead h2 {
+    margin: 0;
+    font-size: 16px;
+}
+
+.heatmapSub {
+    margin: 2px 0 0;
+    font-size: 13px;
+    color: #55554f;
+}
+
+.heatmapLegend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #55554f;
+}
+
+.heatmapLegend svg {
+    display: block;
+}
+
+.hmLegendText {
+    font-size: 11px;
+    fill: #55554f;
+    text-anchor: middle;
+}
+
+.heatmapControls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.heatmapControls .modeSwitch {
+    width: auto;
+}
+
+.heatmapControls .modeSwitch label {
+    flex: none;
+}
+
+.heatmapFrame {
+    margin-top: 8px;
+    min-width: 0;
+}
+
+.heatmapFrame svg {
+    display: block;
+}
+
+.hmName {
+    font-size: 12px;
+    fill: #1a1a19;
+    text-anchor: end;
+    cursor: pointer;
+}
+
+.hmName:hover {
+    text-decoration: underline;
+}
+
+.hmNumbers text,
+.hmTotalText {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+
+.hmNumbers text {
+    text-anchor: middle;
+}
+
+.hmTotalText {
+    fill: #55554f;
+}
+
+/* the tall rows of a few states have bigger text */
+.heatmapFrame.tall .hmName,
+.heatmapFrame.tall .hmNumbers text,
+.heatmapFrame.tall .hmTotalText {
+    font-size: 13px;
+}
+
+.hmRow.selected .hmName {
+    font-weight: 700;
+}
+
+.hmCells rect {
+    cursor: pointer;
+}
+
+.hmCells rect.hovered {
+    stroke: #1a1a19;
+    stroke-width: 1.5;
+}
+
+.hmRegion {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    fill: #77776f;
+}
+
+.hmYear,
+.hmHeader {
+    font-size: 11px;
+    fill: #77776f;
+    text-anchor: middle;
+}
+
+.hmHeader {
+    text-anchor: start;
+}
+
+.hmYear.selected {
+    font-weight: 700;
+    fill: #1a1a19;
+}
+
+.hmYearHit {
+    fill: transparent;
+    cursor: pointer;
+}
+
+.hmSpans rect {
+    fill: none;
+    stroke: #1a1a19;
+    stroke-width: 1.5;
+    pointer-events: none;
+}
+
+.heatmapHint {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #77776f;
 }

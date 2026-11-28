@@ -5,6 +5,7 @@
 
 import { enableTrackClick } from "./slider.js";
 import { createStateCompare, STATE_COLORS, MAX_STATES } from "./statecompare.js";
+import { createHeatmap } from "./heatmap.js";
 
 let DEFAULT_YEAR = 2023,
     MAP_WIDTH = 620,
@@ -97,7 +98,8 @@ let events = [],
 let pathMaker,
     maps = [],
     trendCharts = [],
-    stateCompare = null;
+    stateCompare = null,
+    heatmap = null;
 
 
 // ---------------------------------------------------------------- load + preprocess
@@ -685,6 +687,7 @@ function updateAll() {
     updateTrends();
     showMetrics();
     stateCompare.update(selectedStates);
+    heatmap.update();
 }
 
 
@@ -971,7 +974,7 @@ function setupVis() {
     stateCompare = createStateCompare(root, {
         getEvents: getTypeEvents,
         getYears: () => [ minYear, maxYear ],
-        getShownYears: getShownYears,
+        getTimeline: () => [ getStartYear(), getEndYear() ],
         getShownMetrics: getShownMetrics,
         getName: getStateName,
         formatNumber: formatNumber,
@@ -979,6 +982,24 @@ function setupVis() {
         hideTooltip: hideTooltip,
         getColor: code => STATE_COLORS[stateColors.get(code)],
         onRemove: code => handleSelection(code)
+    });
+
+    // every state in every year, under the slider
+    heatmap = createHeatmap(root, {
+        getEvents: getTypeEvents,
+        getYears: () => [ minYear, maxYear ],
+        getTimeline: () => [ getStartYear(), getEndYear() ],
+        isSelectedYear: isSelectedYear,
+        getSelected: () => selectedStates,
+        metrics: METRICS,
+        getName: getStateName,
+        getColor: code => STATE_COLORS[stateColors.get(code)],
+        formatNumber: formatNumber,
+        moveTooltip: moveTooltip,
+        hideTooltip: hideTooltip,
+        reducedMotion: REDUCED_MOTION,
+        onPickState: handleSelection,
+        onPickYear: year => showOneYear(year)
     });
     setupControls();
     setYear(Math.min(DEFAULT_YEAR, maxYear));
