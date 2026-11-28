@@ -11,6 +11,7 @@ let BAR_COLOR = "#256abf",
 //   getVisibleEvents()  the same, inside the years of the slider
 //   getGraphGroups()    the groups in the graph
 //   onPick(a, b)        a rival was clicked: both groups go to the graph
+//   onHover(name)       the pointer is on a rival (null when it leaves): the group is highlighted
 //   shortName(name), formatNumber
 export function createRivals(root, source) {
     let section = root.select(".rivalsArea"),
@@ -100,7 +101,9 @@ export function createRivals(root, source) {
                 return item;
             })
             .order()
-            .on("click", (e, d) => source.onPick(group, d.name));
+            .on("click", (e, d) => source.onPick(group, d.name))
+            .on("mouseenter", (e, d) => source.onHover(d.name))
+            .on("mouseleave", () => source.onHover(null));
 
         items.classed("inGraph", d => inGraph.has(d.name));
         items.select(".rivalName").text(d => source.shortName(d.name));

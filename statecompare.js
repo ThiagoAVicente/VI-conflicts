@@ -21,7 +21,7 @@ let CHART_HEIGHT = 220,
 //   getYears()        [ first, last ] year of the data
 //   getTimeline()     [ first, last ] year of the slider (in compare mode, the years in between too)
 //   getShownMetrics() the metrics ticked in the view (deaths and/or events)
-//   getName(code), getColor(code), formatNumber, moveTooltip, hideTooltip, onRemove(code)
+//   getName(code), getColor(code), formatNumber, moveTooltip, hideTooltip, onRemove(code), onHover(code)
 export function createStateCompare(root, source) {
     let section = root.select(".stateCompare"),
         legend = section.select(".stateLegend"),
@@ -71,6 +71,7 @@ export function createStateCompare(root, source) {
         charts.style("min-height", charts.node().offsetHeight + "px");
         charts.text("");
         source.getShownMetrics().forEach(metric => drawChart(states, metric));
+        applyHighlight();
         charts.style("min-height", null);
     }
 
@@ -80,6 +81,11 @@ export function createStateCompare(root, source) {
             .data(states.concat(TOTAL))
             .join("span")
                 .attr("class", "stateKey");
+
+        // hovering a name highlights the state in the maps and the heatmap too
+        items.filter(d => !d.dashed)
+            .on("mouseenter", (e, d) => source.onHover(d.code))
+            .on("mouseleave", () => source.onHover(null));
 
         items.append("i").style("background", d => d.dashed ? "repeating-linear-gradient(90deg, " + INK + " 0 5px, transparent 5px 8px)" : d.color);
         items.append("span").text(d => d.name);
@@ -158,6 +164,7 @@ export function createStateCompare(root, source) {
         svg.append("g").selectAll("path")
             .data(series)
             .join("path")
+                .attr("class", "stateLine")
                 .attr("d", d => line(d.values))
                 .attr("fill", "none")
                 .attr("stroke", d => d.state.color)
@@ -228,5 +235,18 @@ export function createStateCompare(root, source) {
         return years.filter(year => year % every === 0 || years.length === 1);
     }
 
-    return { update };
+    // the state hovered anywhere in the view: its line stays, the others fade (the total stays)
+    let highlighted = null;
+
+    function applyHighlight() {
+        charts.selectAll("path.stateLine")
+            .attr("stroke-opacity", d => highlighted === null || d.state.dashed || d.state.code === highlighted ? 1 : 0.15);
+    }
+
+    function highlight(code) {
+        highlighted = code;
+        applyHighlight();
+    }
+
+    return { update, highlight };
 }

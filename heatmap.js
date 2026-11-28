@@ -39,6 +39,7 @@ let ROW_HEIGHTS = [ { states: 5, height: 30 }, { states: 10, height: 22 }, { sta
 //   getEvents()          the events of the checked types, in every year
 //   getYears()           [ first, last ] year of the data
 //   getTimeline()        [ first, last ] year of the slider (in compare mode, the years in between too)
+//   onHoverState(code)   the pointer is on a row (null when it leaves): the state is highlighted
 //   isSelectedYear(year) the years of the slider (the period, the year, or the two compared years)
 //   getSelected()        the codes of the selected states
 //   metrics              deaths and events, with their colours (METRICS of view1.js)
@@ -214,7 +215,10 @@ export function createHeatmap(root, source) {
             .join(enter => {
                 let g = enter.append("g")
                     .attr("class", "hmRow")
-                    .attr("transform", d => "translate(0," + d.y + ")");
+                    .attr("transform", d => "translate(0," + d.y + ")")
+                    // the state of the row is highlighted in the maps and the comparison too
+                    .on("mouseenter", (e, d) => source.onHoverState(d.code))
+                    .on("mouseleave", () => source.onHoverState(null));
 
                 g.append("rect").attr("class", "hmMark");
                 g.append("text")
@@ -233,7 +237,9 @@ export function createHeatmap(root, source) {
             .attr("transform", d => "translate(0," + d.y + ")");
 
         // the selected states: bold, with the colour of their line in the comparison chart
-        groups.classed("selected", d => selected.includes(d.code));
+        groups.classed("selected", d => selected.includes(d.code))
+            .classed("linked", d => highlighted !== null && d.code === highlighted)
+            .classed("dimmed", d => highlighted !== null && d.code !== highlighted);
 
         groups.select(".hmMark")
             .attr("x", MARGIN.left - 6)
@@ -445,5 +451,15 @@ export function createHeatmap(root, source) {
         source.hideTooltip();
     }
 
-    return { update: update };
+    // the state hovered anywhere in the view: its row stays, the others fade
+    let highlighted = null;
+
+    function highlight(code) {
+        highlighted = code;
+        rowLayer.selectAll("g.hmRow")
+            .classed("linked", d => code !== null && d.code === code)
+            .classed("dimmed", d => code !== null && d.code !== code);
+    }
+
+    return { update: update, highlight: highlight };
 }

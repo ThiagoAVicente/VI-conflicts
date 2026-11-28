@@ -66,7 +66,13 @@ export function createCompare(root, source) {
         let items = panel.select(".groupList").selectAll("label")
             .data(groups)
             .join("label")
-                .attr("class", "pickerItem");
+                .attr("class", "pickerItem")
+                .on("mouseenter", (e, name) => {
+                    if ( chosen.has(name) ) {
+                        source.onHover(name);
+                    }
+                })
+                .on("mouseleave", () => source.onHover(null));
 
         items.append("input")
             .attr("type", "checkbox")
@@ -221,6 +227,11 @@ export function createCompare(root, source) {
             .data(series.length >= 2 ? series.concat(total) : [])
             .join("span");
 
+        // hovering a name highlights the group everywhere (the dashed total is not a group)
+        items.filter(d => !d.dashed)
+            .on("mouseenter", (e, d) => source.onHover(d.name))
+            .on("mouseleave", () => source.onHover(null));
+
         items.append("i").attr("class", "lineKey")
             .style("background", d => d.dashed ? "repeating-linear-gradient(90deg, " + INK + " 0 5px, transparent 5px 8px)" : d.color);
         items.append("text").text(d => source.shortName(d.name));
@@ -333,6 +344,7 @@ export function createCompare(root, source) {
         svg.append("g").selectAll("path")
             .data(series)
             .join("path")
+                .attr("class", "groupLine")
                 .attr("d", d => line(d.values))
                 .attr("fill", "none")
                 .attr("stroke", d => d.color)
@@ -344,6 +356,7 @@ export function createCompare(root, source) {
         svg.append("g").selectAll("circle")
             .data(picked)
             .join("circle")
+                .attr("class", "compareEnd")
                 .attr("cx", d => x(d3.max(years)))
                 .attr("cy", d => y(d.values[d.values.length - 1].value))
                 .attr("r", 4)
@@ -356,6 +369,29 @@ export function createCompare(root, source) {
         }
 
         drawHover(svg, series, x, y, { left, right, top, bottom });
+        applyHighlight();
+    }
+
+    // the group hovered anywhere in the view: its line stays, the others fade
+    let highlighted = null;
+
+    // name: a group, or a list of groups (the two groups of a link), or null
+    function highlight(name) {
+        highlighted = name;
+        applyHighlight();
+    }
+
+    function isHighlighted(name) {
+        return Array.isArray(highlighted) ? highlighted.includes(name) : name === highlighted;
+    }
+
+    function applyHighlight() {
+        frame.selectAll("path.groupLine")
+            .attr("stroke-opacity", d => highlighted === null || d.dashed || isHighlighted(d.name) ? 1 : 0.15);
+        frame.selectAll(".compareEnd")
+            .attr("opacity", d => highlighted === null || isHighlighted(d.name) ? 1 : 0.15);
+        panel.selectAll(".pickerItem")
+            .classed("isHovered", name => highlighted !== null && isHighlighted(name));
     }
 
     // the years of the slider: a band for a range, a line for a single year
@@ -410,6 +446,7 @@ export function createCompare(root, source) {
         svg.append("g").selectAll("text")
             .data(labels)
             .join("text")
+                .attr("class", "compareEnd")
                 .attr("x", right + 10)
                 .attr("y", d => d.y)
                 .attr("dy", "0.32em")
@@ -520,5 +557,10 @@ export function createCompare(root, source) {
             .slice(0, MAX_GROUPS);
     }
 
-    return { update, setGroups, topGroups, canPick: name => groups.includes(name), maxGroups: MAX_GROUPS };
+    // the colour of a picked group (the network uses the same), null when it is not in the chart
+    function getColor(name) {
+        return chosen.has(name) ? SERIES_COLORS[chosen.get(name)] : null;
+    }
+
+    return { update, setGroups, topGroups, getColor, highlight, canPick: name => groups.includes(name), maxGroups: MAX_GROUPS };
 }

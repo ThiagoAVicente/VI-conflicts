@@ -252,8 +252,12 @@ function drawMaps() {
                 .attr("class", "state")
                 .attr("d", d => pathMaker(d))
                 .attr("fill", metric.colors[0])
+                .on("mouseenter", (e, d) => highlightState(d.id))
                 .on("mousemove", showTooltip)
-                .on("mouseout", hideTooltip)
+                .on("mouseout", () => {
+                    hideTooltip();
+                    highlightState(null);
+                })
                 .on("click", (e, d) => handleSelection(d.id));
 
         // state codes, only on states big enough to hold them
@@ -732,6 +736,22 @@ function handleSelection(stateCode) {
     updateAll();
 }
 
+// the state under the pointer, on a map, in the heatmap or in the comparison: it is highlighted in all of
+// them (its outline, its row and its line; the rest of the rows and lines fade)
+function highlightState(code) {
+    d3.selectAll("#view1 path.state")
+        .classed("linked", d => code !== null && d.id === code)
+        .filter(d => code !== null && d.id === code)
+        .raise();
+
+    if ( heatmap !== null ) {
+        heatmap.highlight(code);
+    }
+    if ( stateCompare !== null ) {
+        stateCompare.highlight(code);
+    }
+}
+
 // takes every state out of the selection (back to Brazil)
 function clearStates() {
     selectedStates = [];
@@ -981,7 +1001,8 @@ function setupVis() {
         moveTooltip: moveTooltip,
         hideTooltip: hideTooltip,
         getColor: code => STATE_COLORS[stateColors.get(code)],
-        onRemove: code => handleSelection(code)
+        onRemove: code => handleSelection(code),
+        onHover: highlightState
     });
 
     // every state in every year, under the slider
@@ -999,6 +1020,7 @@ function setupVis() {
         hideTooltip: hideTooltip,
         reducedMotion: REDUCED_MOTION,
         onPickState: handleSelection,
+        onHoverState: highlightState,
         onPickYear: year => showOneYear(year)
     });
     setupControls();

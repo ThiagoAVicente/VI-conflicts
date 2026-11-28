@@ -72,6 +72,12 @@ main {
     stroke-width: 3;
 }
 
+/* the state hovered in a map, the heatmap or the comparison */
+.state.linked {
+    stroke: #1a1a19;
+    stroke-width: 2.5;
+}
+
 .stateLabel {
     font-size: 10px;
     text-anchor: middle;
@@ -548,14 +554,13 @@ aside {
 }
 
 .node circle {
-    fill: #e6e5e1;
+    fill: var(--node-fill, #77766f);
     stroke: #1a1a19;
     stroke-width: 1.5;
 }
 
 .node.selected circle {
-    fill: #1a1a19;
-    stroke-width: 3;
+    stroke-width: 2.5;
 }
 
 /* a click takes the group out of the graph */
@@ -563,8 +568,31 @@ aside {
     fill: #ec4647;
 }
 
+/* the hovered group: the groups it fought stay, the others and their links fade */
+.node.dimmed,
+.nodeName.dimmed {
+    opacity: 0.2;
+}
+
+.link.hot {
+    stroke: #1a1a19;
+    stroke-opacity: 1;
+}
+
+.link.dimmed {
+    stroke-opacity: 0.08;
+}
+
+.rival:hover .rivalName {
+    text-decoration: underline;
+}
+
+.pickerItem.isHovered {
+    background: #efeeea;
+}
+
 /* white halo so the labels stay readable over the links */
-.node text {
+.nodeName {
     font-size: 11px;
     paint-order: stroke;
     stroke: #fcfcfb;
@@ -1495,4 +1523,12 @@ aside {
     .scrollHint svg {
         animation: none;
     }
+}
+
+.hmRow.dimmed {
+    opacity: 0.3;
+}
+
+.hmRow.linked .hmName {
+    font-weight: 700;
 }

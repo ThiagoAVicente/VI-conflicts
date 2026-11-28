@@ -3,8 +3,8 @@
 // Pipeline: load data -> preprocess -> draw -> interaction.
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
-let NET_WIDTH = 640,
-    NET_HEIGHT = 520,
+let NET_WIDTH = 720,
+    NET_HEIGHT = 640,
     MAP_WIDTH = 620,
     MAP_HEIGHT = 600,
     PLAY_SPEED = 900,
@@ -31,6 +31,9 @@ let SHORT_NAMES = new Map([ [ "Comando Vermelho", "CV" ] ]);
 // colour of the places (the blue of the deaths in View 1)
 let PLACE_COLOR = "#256abf";
 
+// a group that is not in the chart under the slider
+let NODE_COLOR = "#77766f";
+
 // size of the places: the area of the dot is the number of deaths and nothing else, so
 // the dots of any two selections can be compared (Fortaleza, the largest, has about 1,500 deaths)
 let placeRadius = d3.scaleSqrt()
@@ -51,7 +54,16 @@ let events = [],
     singleYear = false,
     graphGroups = [],
     selectedState = null,
-    playTimer = null;
+    playTimer = null,
+    // while playing: the position of the handle (a fractional year)
+    playPosition = null,
+    // the number of years after the first one in the window being played: 0 in Single mode,
+    // in Range mode the period keeps its width and slides to the right
+    playWidth = 0;
+
+// while playing, a dot keeps the size of its year and only changes in the middle of the
+// way to the next year (this part of the year), so each year can be read before it changes
+let MORPH_SHARE = 0.5;
 
 // the node objects are kept between updates, so a group keeps its place in the layout
 // when the filters remove it and bring it back
@@ -65,6 +77,7 @@ let simulation,
     linkLayer,
     hitLayer,
     nodeLayer,
+    nameLayer,
     dotLayer,
     labelLayer,
     statePaths,
@@ -205,12 +218,14 @@ function newNode(name) {
     };
 }
 
-// the places of the selected events: one dot per coordinate.
-// Inside a zoomed state with nothing selected, all the conflicts of the state are shown
-function getPlaces() {
-    let list = getVisibleEvents();
+// the events drawn on the map: the conflicts between the groups of the graph
+function getMapEvents(list) {
+    return list.filter(inSelection);
+}
 
-    list = list.filter(inSelection);
+// the places of those events: one dot per coordinate
+function getPlaces() {
+    let list = getMapEvents(getVisibleEvents());
 
     let places = d3.rollups(list,
         group => ({
@@ -222,7 +237,9 @@ function getPlaces() {
             stateCode: group[0].stateCode,
             deaths: d3.sum(group, d => d.deaths),
             events: group.length,
-            years: d3.extent(group, d => d.year)
+            years: d3.extent(group, d => d.year),
+            groups: new Set(group.flatMap(d => [ d.sideA, d.sideB ])),
+            pairs: new Set(group.map(d => linkKey(d.sideA, d.sideB)))
         }),
         d => d.lat + "," + d.lon)
         .map(d => d[1]);
@@ -230,6 +247,56 @@ function getPlaces() {
     // the large places are drawn first so the small ones stay on top and can be hovered
     places.sort((a, b) => d3.descending(a.deaths, b.deaths));
     return { list, places };
+}
+
+// while playing: every place of the played years, with its deaths in each year, so the dots
+// can grow and shrink between the years instead of jumping
+function getPlayPlaces() {
+    let places = d3.rollups(getMapEvents(getTypeEvents()),
+        group => {
+            let byYear = d3.rollup(group, g => ({ deaths: d3.sum(g, d => d.deaths), events: g.length }), d => d.year);
+
+            return {
+                key: group[0].lat + "," + group[0].lon,
+                lat: group[0].lat,
+                lon: group[0].lon,
+                place: group[0].place,
+                state: group[0].state,
+                stateCode: group[0].stateCode,
+                byYear: byYear,
+                groups: new Set(group.flatMap(d => [ d.sideA, d.sideB ])),
+                pairs: new Set(group.map(d => linkKey(d.sideA, d.sideB))),
+                maxDeaths: d3.max(byYear.values(), d => d.deaths)
+            };
+        },
+        d => d.lat + "," + d.lon)
+        .map(d => d[1]);
+
+    places.sort((a, b) => d3.descending(a.maxDeaths, b.maxDeaths));
+    return places;
+}
+
+function deathsIn(place, year) {
+    let value = place.byYear.get(year);
+    return value === undefined ? 0 : value.deaths;
+}
+
+// the size of a dot at a fractional year of the play: the deaths of the nearest year, blended
+// into the next year in the middle of the way (eased, so the dot speeds up and slows down)
+function playRadius(place, position) {
+    let year = Math.floor(position),
+        t = (position - year - (1 - MORPH_SHARE) / 2) / MORPH_SHARE;
+
+    t = REDUCED_MOTION ? Math.round(position - year) : d3.easeCubicInOut(Math.max(0, Math.min(1, t)));
+
+    // the deaths of every year of the window, each one blended into the next
+    let deaths = 0;
+
+    for ( let k = 0; k <= playWidth; k++ ) {
+        deaths += deathsIn(place, year + k) * (1 - t) + deathsIn(place, year + k + 1) * t;
+    }
+
+    return placeRadius(deaths);
 }
 
 // ---------------------------------------------------------------- draw
@@ -260,6 +327,8 @@ function drawNetwork() {
     linkLayer = svg.append("g");
     hitLayer = svg.append("g");
     nodeLayer = svg.append("g");
+    // the names are above every circle and line
+    nameLayer = svg.append("g").style("pointer-events", "none");
 
     simulation = d3.forceSimulation()
         // the link length counts the size of both circles, so two large groups do not touch
@@ -291,7 +360,13 @@ function boxCollide() {
     let nodes = [];
 
     function force() {
-        for ( let pass = 0; pass < 3; pass++ ) {
+        // inside the frame first, so the boxes are compared where the groups are drawn
+        nodes.forEach(d => {
+            d.x = Math.max(d.r + 4, Math.min(NET_WIDTH - d.r - 4, d.x));
+            d.y = Math.max(d.r + 4, Math.min(NET_HEIGHT - d.r - 4, d.y));
+        });
+
+        for ( let pass = 0; pass < 4; pass++ ) {
             for ( let i = 0; i < nodes.length; i++ ) {
                 for ( let j = i + 1; j < nodes.length; j++ ) {
                     let a = getBox(nodes[i]),
@@ -365,9 +440,13 @@ function updateNetwork() {
         .data(links, d => d.key)
         .join("line")
             .attr("class", "hit")
+            .on("mouseover", (e, d) => highlightLink(d))
             .on("mousemove", (e, d) => showTooltip(e, shortName(d.source.id) + " vs " + shortName(d.target.id) + ": "
                 + formatNumber(d.deaths) + " deaths, " + formatNumber(d.events) + " events"))
-            .on("mouseout", hideTooltip);
+            .on("mouseout", () => {
+                hideTooltip();
+                highlightLink(null);
+            });
 
     nodeLayer.selectAll("g.node")
         .data(nodes, d => d.id)
@@ -376,18 +455,97 @@ function updateNetwork() {
                 .attr("class", "node selected")
                 .call(dragNode)
                 .on("click", (e, d) => removeGroup(d.id))
+                .on("mouseover", (e, d) => highlightGroup(d.id))
                 .on("mousemove", (e, d) => showTooltip(e, d.id + ": " + formatNumber(d.deaths) + " deaths in "
                     + d.conflicts + (d.conflicts === 1 ? " conflict" : " conflicts") + ". Click to take it out"))
-                .on("mouseout", hideTooltip);
+                .on("mouseout", () => {
+                    hideTooltip();
+                    highlightGroup(null);
+                });
             g.append("circle").attr("r", 0);
-            g.append("text").attr("y", 4).text(d => shortName(d.id));
             return g;
         })
+        // the colour of a group is the one of its line in the chart under the slider (grey when it is not in the chart)
+        .style("--node-fill", d => compare !== null && compare.getColor(d.id) || NODE_COLOR)
         .select("circle").transition("size").duration(transitionTime())
             .attr("r", d => d.r);
 
-    simulation.alpha(0.5).restart();
+    nameLayer.selectAll("text")
+        .data(nodes, d => d.id)
+        .join("text")
+            .attr("class", "nodeName")
+            .attr("dy", 4)
+            .text(d => shortName(d.id));
+
+    simulation.alpha(0.8).restart();
     paintNetwork();
+    applyGroupHighlight();
+}
+
+// the group under the pointer, in the network, the chart, the list of rivals or the map: it is
+// highlighted in all of them (the groups it fought stay, the others fade)
+let hoveredGroup = null,
+    hoveredLink = null;
+
+function highlightGroup(name) {
+    hoveredGroup = name;
+    hoveredLink = null;
+    applyGroupHighlight();
+
+    if ( compare !== null ) {
+        compare.highlight(name);
+    }
+}
+
+// the pointer is on a link: only the fights between its two groups stay (in the network, the chart and the map)
+function highlightLink(link) {
+    hoveredLink = link;
+    hoveredGroup = null;
+    applyGroupHighlight();
+
+    if ( compare !== null ) {
+        compare.highlight(link === null ? null : [ link.source.id, link.target.id ]);
+    }
+}
+
+function applyGroupHighlight() {
+    if ( hoveredLink !== null ) {
+        let link = hoveredLink,
+            pair = [ link.source.id, link.target.id ];
+
+        linkLayer.selectAll("line")
+            .classed("hot", d => d.key === link.key)
+            .classed("dimmed", d => d.key !== link.key);
+        nodeLayer.selectAll("g.node").classed("dimmed", d => !pair.includes(d.id));
+        nameLayer.selectAll("text").classed("dimmed", d => !pair.includes(d.id));
+        dotLayer.selectAll("circle")
+            .style("opacity", d => d.pairs !== undefined && d.pairs.has(link.key) ? null : 0.12);
+        return;
+    }
+
+    let name = hoveredGroup;
+
+    // the groups linked to the hovered one
+    let near = new Set([ name ]);
+
+    linkLayer.selectAll("line").each(d => {
+        if ( d.source.id === name ) {
+            near.add(d.target.id);
+        } else if ( d.target.id === name ) {
+            near.add(d.source.id);
+        }
+    });
+
+    linkLayer.selectAll("line")
+        .classed("hot", d => name !== null && (d.source.id === name || d.target.id === name))
+        .classed("dimmed", d => name !== null && d.source.id !== name && d.target.id !== name);
+
+    nodeLayer.selectAll("g.node").classed("dimmed", d => name !== null && !near.has(d.id));
+    nameLayer.selectAll("text").classed("dimmed", d => name !== null && !near.has(d.id));
+
+    // the places where the group fought
+    dotLayer.selectAll("circle")
+        .style("opacity", d => name === null || (d.groups !== undefined && d.groups.has(name)) ? null : 0.12);
 }
 
 // moves the lines and the groups to the positions computed by the simulation
@@ -408,10 +566,11 @@ function paintNetwork() {
     let groups = nodeLayer.selectAll("g.node")
         .attr("transform", d => "translate(" + d.x + "," + d.y + ")");
 
-    // labels on the right of the circle, or on the left near the right edge
-    groups.select("text")
+    // names on the right of the circle, or on the left near the right edge
+    nameLayer.selectAll("text")
         .attr("text-anchor", d => d.x > NET_WIDTH * 0.6 ? "end" : "start")
-        .attr("x", d => d.x > NET_WIDTH * 0.6 ? -(d.r + 4) : d.r + 4);
+        .attr("x", d => d.x + (d.x > NET_WIDTH * 0.6 ? -(d.r + 4) : d.r + 4))
+        .attr("y", d => d.y);
 }
 
 function drawPlaceMap() {
@@ -525,6 +684,61 @@ function zoomMap() {
 function updatePlaceMap() {
     let { list, places } = getPlaces();
 
+    if ( playTimer !== null ) {
+        updatePlayDots();
+    } else {
+        updateYearDots(places);
+    }
+
+    updatePlaceLegend(places);
+    updateCaption(list, places);
+}
+
+// while playing: a dot for every place of any year, sized by the frame of the player (see drawPlayFrame)
+function updatePlayDots() {
+    dotLayer.selectAll("circle")
+        .data(getPlayPlaces(), d => d.key)
+        .join(
+            enter => enter.append("circle")
+                .attr("class", "place")
+                .attr("cx", d => placePosition(d)[0])
+                .attr("cy", d => placePosition(d)[1])
+                .attr("r", 0),
+            update => update,
+            exit => exit.remove())
+            .on("mousemove", (e, d) => {
+                let year = { deaths: 0, events: 0 };
+
+                d3.range(startYear, endYear + 1).forEach(y => {
+                    let value = d.byYear.get(y) || { deaths: 0, events: 0 };
+                    year.deaths += value.deaths;
+                    year.events += value.events;
+                });
+                showTooltip(e, d.place + ", " + d.state + ": " + formatNumber(year.deaths)
+                    + " deaths in " + formatNumber(year.events) + " events (" + formatYears([ startYear, endYear ]) + ")");
+            })
+            .on("mouseout", hideTooltip)
+            .on("click", (e, d) => {
+                if ( selectedState === null ) {
+                    selectState(d.stateCode);
+                }
+            })
+            .order()
+            .style("transform", "scale(" + getDotScale() + ")")
+            .interrupt("size")
+            .attr("fill", PLACE_COLOR);
+
+    drawPlayFrame();
+    applyGroupHighlight();
+}
+
+// sizes the dots for the current position of the player
+function drawPlayFrame() {
+    dotLayer.selectAll("circle").attr("r", d => playRadius(d, playPosition));
+}
+
+// the dots of the years of the slider, animated from what was there before
+function updateYearDots(places) {
     dotLayer.selectAll("circle")
         .data(places, d => d.key)
         .join(
@@ -553,8 +767,7 @@ function updatePlaceMap() {
             .attr("r", d => placeRadius(d.deaths))
             .attr("fill", PLACE_COLOR);
 
-    updatePlaceLegend(places);
-    updateCaption(list, places);
+    applyGroupHighlight();
 }
 
 function updatePlaceLegend(places) {
@@ -649,7 +862,7 @@ function getFocusEvents() {
 function jumpToFocusYears() {
     let years = getFocusEvents().map(d => d.year);
 
-    if ( singleYear || years.length === 0 ) {
+    if ( singleYear || playTimer !== null || years.length === 0 ) {
         updateAll();
         return;
     }
@@ -685,7 +898,7 @@ export function showConflict(conflict, first, last, types) {
 }
 
 // the graph changed: the chart under the slider compares its groups (the first few, or the ones
-// with most deaths when "top" is true) and the slider goes to the years of the graph
+// with most deaths when "top" is true); the slider stays where the user put it, unless keepYears is false
 function graphChanged(top, keepYears) {
     compare.setGroups(top ? compare.topGroups() : graphGroups, true);
 
@@ -697,28 +910,23 @@ function graphChanged(top, keepYears) {
 }
 
 function addGroup(name) {
-    // the list of rivals follows the last group added
-    if ( rivals !== null ) {
-        rivals.setGroup(name);
-    }
-
     if ( !graphGroups.includes(name) ) {
         graphGroups = [ ...graphGroups, name ];
-        graphChanged(false, false);
+        graphChanged(false, true);
     }
 }
 
 // a rival of the list was clicked: both groups go to the graph
 function addGroups(first, second) {
     graphGroups = [ ...graphGroups, ...[ first, second ].filter((name, i, list) => !graphGroups.includes(name) && list.indexOf(name) === i) ];
-    graphChanged(false, false);
+    graphChanged(false, true);
 }
 
 // clicking a node takes it out of the graph
 function removeGroup(name) {
     graphGroups = graphGroups.filter(d => d !== name);
     hideTooltip();
-    graphChanged(false, false);
+    graphChanged(false, true);
 }
 
 // every group with events of the checked types (in the zoomed state), in any year
@@ -793,14 +1001,19 @@ function updateModeSwitch() {
     });
 }
 
-// moves both handles, the dark fill between them and the label
+// moves both handles, the dark fill between them and the label.
+// While a period plays, the handles move continuously (a fractional year) and the label shows
+// the years the views are showing
 function updateSliders() {
     let position = year => (year - minYear) / (maxYear - minYear);
-    let p0 = position(startYear),
-        p1 = position(endYear);
+    let playing = playPosition !== null;
+    let first = playing ? playPosition : startYear,
+        last = playing ? playPosition + playWidth : endYear;
+    let p0 = position(first),
+        p1 = position(last);
 
-    d3.select("#startSlider").property("value", startYear);
-    d3.select("#endSlider").property("value", endYear).style("display", singleYear ? "none" : null);
+    d3.select("#startSlider").property("value", first);
+    d3.select("#endSlider").property("value", last).style("display", singleYear ? "none" : null);
 
     // the centre of a 20px handle goes from 10px to (width - 10px)
     root.select(".rangeFill")
@@ -813,7 +1026,9 @@ function updateSliders() {
 
     root.select(".yearLabel").text(formatYears([ startYear, endYear ]));
     root.select(".yearRange").classed("oneHandle", singleYear);
-    root.select(".playButton").style("visibility", singleYear ? null : "hidden");
+
+    // with every year in the range there is nothing to play through
+    root.select(".playButton").property("disabled", !singleYear && startYear === minYear && endYear === maxYear);
     updateModeSwitch();
 }
 
@@ -822,40 +1037,71 @@ export function stopPlay() {
     if ( playTimer !== null ) {
         playTimer.stop();
         playTimer = null;
+        playPosition = null;
         // back to whole years (only after playing: doing it on every call would undo
         // the user's drag before the slider is read)
-        d3.select("#startSlider").attr("step", 1).property("value", startYear);
+        playWidth = 0;
+        d3.selectAll("#startSlider, #endSlider").attr("step", 1);
+        // the dots go back to the places of the year (a dot paused halfway settles on its year)
+        updatePlaceMap();
+        // a paused range says so in the label
+        updateSliders();
     }
     root.select(".playButton").text("Play");
 }
 
-// same player as View 1: the handle moves continuously and the views change at each whole year
+// the handle moves continuously and the views change at each whole year (when the handle is
+// nearest to it); the dots grow and shrink in between. In Single mode it plays from the year
+// to the last year; in Range mode the period keeps its width and slides to the right, like a
+// window over the years
 function togglePlay() {
     if ( playTimer !== null ) {
         stopPlay();
         return;
     }
 
-    if ( startYear === maxYear ) {
-        setYears(minYear, minYear);
+    // a range of one year plays like Single mode
+    if ( !singleYear && startYear === endYear ) {
+        singleYear = true;
     }
 
-    let firstYear = startYear;
-    let slider = d3.select("#startSlider").attr("step", "any");
+    let width = singleYear ? 0 : endYear - startYear;
+    let first = startYear,
+        last = maxYear - width;
+
+    // nothing to play through when the window has every year
+    if ( last <= minYear && width > 0 ) {
+        return;
+    }
+
+    // at the end: from the start again
+    if ( first >= last ) {
+        first = minYear;
+    }
+
+    d3.selectAll("#startSlider, #endSlider").attr("step", "any");
 
     root.select(".playButton").text("Pause");
+    playWidth = width;
+    playPosition = first;
     playTimer = d3.timer(elapsed => {
-        let position = Math.min(maxYear, firstYear + elapsed / PLAY_SPEED);
+        playPosition = Math.min(last, first + elapsed / PLAY_SPEED);
 
-        if ( Math.floor(position) !== startYear ) {
-            setYears(Math.floor(position), Math.floor(position));
+        let year = Math.round(playPosition);
+
+        if ( year !== startYear ) {
+            setYears(year, year + width);
         }
-        slider.property("value", position);
+        updateSliders();
+        drawPlayFrame();
 
-        if ( position >= maxYear ) {
+        if ( playPosition >= last ) {
             stopPlay();
         }
     });
+
+    // the views start on the first window
+    setYears(first, first + width);
 }
 
 function setupControls() {
@@ -872,6 +1118,7 @@ function setupControls() {
     });
 
     d3.select("#endSlider").on("input", function() {
+        stopPlay();
         setYears(startYear, Math.max(+this.value, startYear));
         this.value = endYear;
     });
@@ -1003,6 +1250,7 @@ function setupVis() {
         getVisibleEvents: getVisibleEvents,
         getGraphGroups: () => graphGroups,
         onPick: addGroups,
+        onHover: highlightGroup,
         shortName: shortName,
         formatNumber: formatNumber
     });
@@ -1015,6 +1263,7 @@ function setupVis() {
         getPeriod: () => [ minYear, maxYear ],
         getYears: () => ({ first: startYear, last: endYear, single: singleYear }),
         onPick: pickGroups,
+        onHover: highlightGroup,
         getDataKey: () => getCheckedTypes().join() + "|" + selectedState,
         getScope: () => selectedState === null ? "" : getStateName(selectedState),
         shortName: shortName
