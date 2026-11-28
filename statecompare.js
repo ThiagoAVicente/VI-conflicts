@@ -1,4 +1,4 @@
-// View 1: the comparison of the selected states (Ctrl+click on the map adds a state), under the slider.
+// View 1: the comparison of the selected states (a click on the map adds a state), under the slider.
 // One line chart for each metric shown: a line for each selected state, every year, on the same scale.
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
@@ -7,6 +7,9 @@
 export const STATE_COLORS = [ "#6a4ce2", "#008a17", "#f2a600", "#ee7fac", "#00b894", "#ec4647", "#257de0", "#f47230" ];
 
 export const MAX_STATES = STATE_COLORS.length;
+
+// the dashed line: all the selected states together
+let TOTAL = { name: "Total", color: "#1a1a19", dashed: true };
 
 let CHART_HEIGHT = 220,
     CHART_MARGIN = { top: 14, right: 16, bottom: 24, left: 42 },
@@ -74,13 +77,15 @@ export function createStateCompare(root, source) {
     // the names with the colour of their line; the x takes a state out of the comparison
     function drawLegend(states) {
         let items = legend.text("").selectAll("span")
-            .data(states)
+            .data(states.concat(TOTAL))
             .join("span")
                 .attr("class", "stateKey");
 
-        items.append("i").style("background", d => d.color);
+        items.append("i").style("background", d => d.dashed ? "repeating-linear-gradient(90deg, " + INK + " 0 5px, transparent 5px 8px)" : d.color);
         items.append("span").text(d => d.name);
-        items.append("button")
+
+        // the total is not a state: nothing to take out
+        items.filter(d => !d.dashed).append("button")
             .attr("type", "button")
             .attr("aria-label", d => "Take " + d.name + " out of the comparison")
             .text("×")
@@ -92,7 +97,7 @@ export function createStateCompare(root, source) {
             [ from, to ] = source.getShownYears(),
             years = d3.range(first, last + 1);
 
-        let series = states.map(state => {
+        let picked = states.map(state => {
             let byYear = d3.group(state.events, d => d.year);
 
             let sum = 0;
@@ -104,6 +109,12 @@ export function createStateCompare(root, source) {
                     return { year: year, value: cumulative ? sum : metric.getValue(byYear.get(year) || []) };
                 })
             };
+        });
+
+        // the states are different places: the total is the sum of their lines
+        let series = picked.concat({
+            state: TOTAL,
+            values: years.map((year, i) => ({ year: year, value: d3.sum(picked, s => s.values[i].value) }))
         });
 
         let block = charts.append("div").attr("class", "stateChart");
@@ -164,6 +175,7 @@ export function createStateCompare(root, source) {
                 .attr("d", d => line(d.values))
                 .attr("fill", "none")
                 .attr("stroke", d => d.state.color)
+                .attr("stroke-dasharray", d => d.state.dashed ? "6 4" : null)
                 .attr("stroke-width", 2)
                 .attr("stroke-linejoin", "round");
 

@@ -4,8 +4,8 @@ Visual exploration of organised violence in Brazil (1993-2025), for Information 
 
 One page with two views, switched with the tabs at the top (the year, filters and selection of each view are kept when you switch):
 
-- **View 1** (`#map`): maps of Brazil coloured by the deaths and/or the number of events in each state (the user picks the metric, or both side by side), with a year slider (Single year, Compare two years, or the sum of a Range of years; play goes through the years, sliding the range over time), a type-of-event filter, a side panel with the details of a state and bar charts of each metric per year.
-- **View 2** (`#network`): a force-directed network of the armed groups (links are conflicts, dotted links are attacks on civilians, size and width are deaths). Clicking a link or a group draws its events as dots on a map of Brazil (size is deaths, shade is the typical year) and moves the year range to the years it was active. It only uses events with an exact place (`where_prec` 1-3); the 62 records with only a state-level location are left out, with a note under the map.
+- **View 1** (`#states`): maps of Brazil coloured by the deaths and/or the number of events in each state (the user picks the metric, or both side by side), with a year slider (Single year, Compare two years, or the sum of a Range of years; play goes through the years, sliding the range over time), a type-of-event filter, a side panel with the details of a state and bar charts of each metric per year.
+- **View 2** (`#groups`): a graph builder: groups are added to the network from the search box or with Add all, and clicking a node takes it out; the links are the conflicts between the groups in the graph (dotted links are attacks on civilians, size and width are deaths). The map of Brazil draws the events of those conflicts as dots (size is deaths) and the year range moves to the years they were active. It only uses events with an exact place (`where_prec` 1-3); the 62 records with only a state-level location are left out, with a note under the map.
 
 ## How to run
 

@@ -1058,8 +1058,10 @@ aside {
     flex-shrink: 0;
 }
 
+/* the map keeps the same size with or without the comparison: it fills the window, and the
+   comparison is under it (the page scrolls) */
 #view1 main {
-    flex: 1 0 max(480px, calc(100vh - 260px));
+    flex: 0 0 max(480px, calc(100vh - 191px));
 }
 
 .stateCompare {
@@ -1169,6 +1171,23 @@ aside {
 .stateCompareHead .modeSwitch {
     width: auto;
     margin-left: auto;
+}
+
+#mapArea {
+    position: relative;
+}
+
+#clearStates {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 4px 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+#clearStates[hidden] {
+    display: none;
 }
 
 .stateCompareHead .modeSwitch label {

@@ -126,10 +126,16 @@ export function createCompare(root, source) {
         let years = d3.range(first, last + 1);
         let perYear = new Map(Array.from(chosen.keys(), name => [ name, new Map() ]));
         let totals = new Map();
+        let allPerYear = new Map();
 
         // an event counts for both of its sides
         source.getEvents().forEach(d => {
             let value = metric === "deaths" ? d.deaths : 1;
+
+            // the total of the picked groups counts an event once, even when both its sides are picked
+            if ( chosen.has(d.sideA) || chosen.has(d.sideB) ) {
+                allPerYear.set(d.year, (allPerYear.get(d.year) || 0) + value);
+            }
 
             [ d.sideA, d.sideB ].forEach(name => {
                 totals.set(name, (totals.get(name) || 0) + value);
@@ -155,7 +161,26 @@ export function createCompare(root, source) {
             };
         });
 
-        return { years, series, totals };
+        // the dashed line: everything picked together (only with two or more groups)
+        let total = null;
+
+        if ( series.length >= 2 ) {
+            let sum = 0;
+
+            total = {
+                name: "Total",
+                color: INK,
+                dashed: true,
+                values: years.map(year => {
+                    let value = allPerYear.get(year) || 0;
+
+                    sum += value;
+                    return { year: year, value: cumulative ? sum : value };
+                })
+            };
+        }
+
+        return { years, series, totals, total };
     }
 
     // ticks under 10,000 in full, above in short form (10k), one style for the whole axis
@@ -183,7 +208,7 @@ export function createCompare(root, source) {
         let data = getData();
 
         updateList(data.totals);
-        updateLegend(data.series);
+        updateLegend(data.series, data.total);
 
         drawChart(data);
         drawnKey = key;
@@ -191,12 +216,13 @@ export function createCompare(root, source) {
     }
 
     // names of the picked groups with a short line of their colour (with two or more groups)
-    function updateLegend(series) {
+    function updateLegend(series, total) {
         let items = panel.select(".compareLegend").text("").selectAll("span")
-            .data(series.length >= 2 ? series : [])
+            .data(series.length >= 2 ? series.concat(total) : [])
             .join("span");
 
-        items.append("i").attr("class", "lineKey").style("background", d => d.color);
+        items.append("i").attr("class", "lineKey")
+            .style("background", d => d.dashed ? "repeating-linear-gradient(90deg, " + INK + " 0 5px, transparent 5px 8px)" : d.color);
         items.append("text").text(d => source.shortName(d.name));
     }
 
@@ -208,12 +234,15 @@ export function createCompare(root, source) {
             (cumulative ? "Added up from " + source.getPeriod()[0] + ". " : "Year by year. ")
             + ((!range.single && range.first === source.getPeriod()[0] && range.last === source.getPeriod()[1]) ? ""
                 : range.single ? "The vertical line is the year of the slider. " : "The grey band is the years of the slider. ")
-            + "An event counts for both of its sides."
+            + "An event counts for both of its sides; the dashed line counts it once."
             + (chosen.size >= MAX_GROUPS ? " At most " + MAX_GROUPS + " groups are compared (with Select all, the ones with most deaths)." : "")
             + (scope === "" ? "" : " Only the events in " + scope + "."));
     }
 
-    function drawChart({ years, series }) {
+    function drawChart({ years, series: picked, total }) {
+        // the lines, with the dashed total last (it has no dot at the end)
+        let series = total === null ? picked : picked.concat(total);
+
         let width = frame.node().clientWidth,
             height = frame.node().clientHeight;
 
@@ -307,12 +336,13 @@ export function createCompare(root, source) {
                 .attr("d", d => line(d.values))
                 .attr("fill", "none")
                 .attr("stroke", d => d.color)
+                .attr("stroke-dasharray", d => d.dashed ? "6 4" : null)
                 .attr("stroke-width", 2)
                 .attr("stroke-linejoin", "round")
                 .attr("stroke-linecap", "round");
 
         svg.append("g").selectAll("circle")
-            .data(series)
+            .data(picked)
             .join("circle")
                 .attr("cx", d => x(d3.max(years)))
                 .attr("cy", d => y(d.values[d.values.length - 1].value))

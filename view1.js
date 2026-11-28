@@ -86,7 +86,7 @@ let events = [],
     selectedYear,
     mode = "single",
     baseYear,
-    // the states picked on the map (Ctrl+click adds one), each with a colour for the comparison chart
+    // the states picked on the map (a click adds one, or takes it out), each with a colour for the comparison chart
     selectedStates = [],
     stateColors = new Map(),
     stateGroups = new Map(),
@@ -252,7 +252,7 @@ function drawMaps() {
                 .attr("fill", metric.colors[0])
                 .on("mousemove", showTooltip)
                 .on("mouseout", hideTooltip)
-                .on("click", (e, d) => handleSelection(d.id, e.ctrlKey || e.metaKey || e.shiftKey));
+                .on("click", (e, d) => handleSelection(d.id));
 
         // state codes, only on states big enough to hold them
         let labels = svg.append("g").selectAll("text")
@@ -711,33 +711,34 @@ function getStateName(stateCode) {
     return geoData.features.find(d => d.id === stateCode).properties.name;
 }
 
-// a click selects one state (clicking the selected state again goes back to the whole country).
-// With Ctrl (add = true) the state is added to the selection, or taken out of it: the details add up
+// a click adds the state to the selection, or takes it out when it is already in: the details add up
 // the states, and the chart under the slider compares them
-function handleSelection(stateCode, add = false) {
-    if ( add ) {
-        if ( selectedStates.includes(stateCode) ) {
-            selectedStates = selectedStates.filter(d => d !== stateCode);
-            stateColors.delete(stateCode);
-        } else if ( selectedStates.length < MAX_STATES ) {
-            selectedStates = [ ...selectedStates, stateCode ];
-            // the first colour that no other selected state has
-            let used = Array.from(stateColors.values());
+function handleSelection(stateCode) {
+    if ( selectedStates.includes(stateCode) ) {
+        selectedStates = selectedStates.filter(d => d !== stateCode);
+        stateColors.delete(stateCode);
+    } else if ( selectedStates.length < MAX_STATES ) {
+        selectedStates = [ ...selectedStates, stateCode ];
+        // the first colour that no other selected state has
+        let used = Array.from(stateColors.values());
 
-            stateColors.set(stateCode, d3.range(MAX_STATES).find(slot => !used.includes(slot)));
-        }
-    } else {
-        let only = selectedStates.length === 1 && selectedStates[0] === stateCode;
-
-        selectedStates = only ? [] : [ stateCode ];
-        stateColors.clear();
-        if ( !only ) {
-            stateColors.set(stateCode, 0);
-        }
+        stateColors.set(stateCode, d3.range(MAX_STATES).find(slot => !used.includes(slot)));
     }
     d3.select("#panelHint").style("display", selectedStates.length === 0 ? "block" : "none");
+    d3.select("#clearStates").property("hidden", selectedStates.length === 0);
     updateAll();
 }
+
+// takes every state out of the selection (back to Brazil)
+function clearStates() {
+    selectedStates = [];
+    stateColors.clear();
+    d3.select("#panelHint").style("display", "block");
+    d3.select("#clearStates").property("hidden", true);
+    updateAll();
+}
+
+d3.select("#clearStates").on("click", clearStates);
 
 function showTooltip(e, d) {
     let text = d.properties.name + ", " + getYearLabel() + ": " + describe(stateGroups.get(d.id) || []);
@@ -827,6 +828,9 @@ function placeHandles(first, last) {
         return;
     }
 
+    // the two years are not a period: only the handles are shown, without the dark line between them
+    let fillShown = !isCompare();
+
     // the main handle keeps its side: it is the start if it was on the left of the base one
     let mainFirst = selectedYear < baseYear;
 
@@ -837,7 +841,7 @@ function placeHandles(first, last) {
 
     // the centre of a 20px handle goes from 10px to (width - 10px)
     root.select(".rangeFill")
-        .style("display", null)
+        .style("display", fillShown ? null : "none")
         .style("left", "calc(10px + (100% - 20px) * " + position(first) + ")")
         .style("width", "calc((100% - 20px) * " + (position(last) - position(first)) + ")");
 }
@@ -974,7 +978,7 @@ function setupVis() {
         moveTooltip: moveTooltip,
         hideTooltip: hideTooltip,
         getColor: code => STATE_COLORS[stateColors.get(code)],
-        onRemove: code => handleSelection(code, true)
+        onRemove: code => handleSelection(code)
     });
     setupControls();
     setYear(Math.min(DEFAULT_YEAR, maxYear));

@@ -1,13 +1,14 @@
 // Entry point: loads the data once, starts the two views and switches between them
-// with the tabs of the navbar (index.html#map and index.html#network).
+// with the tabs of the navbar (index.html#states and index.html#groups; the names are not the ids of elements of the page,
+// or the browser would scroll to them).
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
 import { startView1, stopPlay as stopPlay1 } from "./view1.js";
 import { startView2, stopPlay as stopPlay2, showConflict } from "./view2.js";
 
 let VIEWS = [
-    { hash: "#map", id: "view1", stopPlay: stopPlay1 },
-    { hash: "#network", id: "view2", stopPlay: stopPlay2 }
+    { hash: "#states", id: "view1", stopPlay: stopPlay1 },
+    { hash: "#groups", id: "view2", stopPlay: stopPlay2 }
 ];
 
 let loaded = false;
@@ -35,7 +36,7 @@ window.addEventListener("hashchange", showView);
 
 // a conflict clicked in View 1 opens in View 2
 window.addEventListener("openconflict", e => {
-    location.hash = "#network";
+    location.hash = "#groups";
     showView();
     showConflict(e.detail.conflict, e.detail.first, e.detail.last, e.detail.types);
 });

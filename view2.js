@@ -3,8 +3,8 @@
 // Pipeline: load data -> preprocess -> draw -> interaction.
 // Libraries: d3 v7 (global object d3), loaded in index.html.
 
-let NET_WIDTH = 640,
-    NET_HEIGHT = 520,
+let NET_WIDTH = 720,
+    NET_HEIGHT = 640,
     MAP_WIDTH = 620,
     MAP_HEIGHT = 600,
     PLAY_SPEED = 900,
@@ -27,9 +27,8 @@ let MAX_PRECISION = 3;
 // long names shortened in the labels
 let SHORT_NAMES = new Map([ [ "Comando Vermelho", "CV" ] ]);
 
-// the typical year of a place, from the first year of the range (light) to the last (dark),
-// with the same blues as View 1
-let YEAR_COLORS = [ "#9ec5f4", "#5598e7", "#256abf", "#0d366b" ];
+// colour of the places (the blue of the deaths in View 1)
+let PLACE_COLOR = "#256abf";
 
 // size of the places: the area of the dot is the number of deaths and nothing else, so
 // the dots of any two selections can be compared (Fortaleza, the largest, has about 1,500 deaths)
@@ -64,6 +63,7 @@ let simulation,
     linkLayer,
     hitLayer,
     nodeLayer,
+    nameLayer,
     dotLayer,
     labelLayer,
     statePaths,
@@ -221,8 +221,7 @@ function getPlaces() {
             stateCode: group[0].stateCode,
             deaths: d3.sum(group, d => d.deaths),
             events: group.length,
-            years: d3.extent(group, d => d.year),
-            typicalYear: getTypicalYear(group)
+            years: d3.extent(group, d => d.year)
         }),
         d => d.lat + "," + d.lon)
         .map(d => d[1]);
@@ -231,24 +230,6 @@ function getPlaces() {
     places.sort((a, b) => d3.descending(a.deaths, b.deaths));
     return { list, places };
 }
-
-// the year that best describes when a place was active: the mean year of its events,
-// weighted by deaths (an event with 0 deaths still counts once)
-function getTypicalYear(group) {
-    let weight = d => Math.max(d.deaths, 1);
-
-    return d3.sum(group, d => d.year * weight(d)) / d3.sum(group, weight);
-}
-
-function getYearColor(year) {
-    if ( startYear === endYear ) {
-        return YEAR_COLORS[YEAR_COLORS.length - 1];
-    }
-    return d3.scaleQuantize()
-        .domain([ startYear, endYear ])
-        .range(YEAR_COLORS)(year);
-}
-
 
 // ---------------------------------------------------------------- draw
 
@@ -278,6 +259,8 @@ function drawNetwork() {
     linkLayer = svg.append("g");
     hitLayer = svg.append("g");
     nodeLayer = svg.append("g");
+    // the names are above every circle and line
+    nameLayer = svg.append("g").style("pointer-events", "none");
 
     simulation = d3.forceSimulation()
         // the link length counts the size of both circles, so two large groups do not touch
@@ -304,12 +287,17 @@ function getBox(d) {
     };
 }
 
-// pushes apart the groups whose boxes overlap, along the axis with less overlap
+// keeps the groups inside the frame and pushes apart those whose boxes overlap, along the axis with less overlap
 function boxCollide() {
     let nodes = [];
 
     function force() {
-        for ( let pass = 0; pass < 3; pass++ ) {
+        nodes.forEach(d => {
+            d.x = Math.max(d.r + 4, Math.min(NET_WIDTH - d.r - 4, d.x));
+            d.y = Math.max(d.r + 4, Math.min(NET_HEIGHT - d.r - 4, d.y));
+        });
+
+        for ( let pass = 0; pass < 4; pass++ ) {
             for ( let i = 0; i < nodes.length; i++ ) {
                 for ( let j = i + 1; j < nodes.length; j++ ) {
                     let a = getBox(nodes[i]),
@@ -394,18 +382,35 @@ function updateNetwork() {
                 .attr("class", "node selected")
                 .call(dragNode)
                 .on("click", (e, d) => removeGroup(d.id))
+                .on("mouseover", (e, d) => highlight(d))
                 .on("mousemove", (e, d) => showTooltip(e, d.id + ": " + formatNumber(d.deaths) + " deaths in "
                     + d.conflicts + (d.conflicts === 1 ? " conflict" : " conflicts") + ". Click to take it out"))
-                .on("mouseout", hideTooltip);
+                .on("mouseout", () => {
+                    hideTooltip();
+                    highlight(null);
+                });
             g.append("circle").attr("r", 0);
-            g.append("text").attr("y", 4).text(d => shortName(d.id));
             return g;
         })
         .select("circle").transition("size").duration(transitionTime())
             .attr("r", d => d.r);
 
-    simulation.alpha(0.5).restart();
+    nameLayer.selectAll("text")
+        .data(nodes, d => d.id)
+        .join("text")
+            .attr("class", "nodeName")
+            .attr("dy", 4)
+            .text(d => shortName(d.id));
+
+    simulation.alpha(0.8).restart();
     paintNetwork();
+}
+
+// hovering a group: its links are drawn dark and the others fade, so its conflicts can be followed
+function highlight(node) {
+    linkLayer.selectAll("line")
+        .classed("hot", d => node !== null && (d.source === node || d.target === node))
+        .classed("dimmed", d => node !== null && d.source !== node && d.target !== node);
 }
 
 // moves the lines and the groups to the positions computed by the simulation
@@ -426,10 +431,11 @@ function paintNetwork() {
     let groups = nodeLayer.selectAll("g.node")
         .attr("transform", d => "translate(" + d.x + "," + d.y + ")");
 
-    // labels on the right of the circle, or on the left near the right edge
-    groups.select("text")
+    // names on the right of the circle, or on the left near the right edge
+    nameLayer.selectAll("text")
         .attr("text-anchor", d => d.x > NET_WIDTH * 0.6 ? "end" : "start")
-        .attr("x", d => d.x > NET_WIDTH * 0.6 ? -(d.r + 4) : d.r + 4);
+        .attr("x", d => d.x + (d.x > NET_WIDTH * 0.6 ? -(d.r + 4) : d.r + 4))
+        .attr("y", d => d.y);
 }
 
 function drawPlaceMap() {
@@ -551,7 +557,7 @@ function updatePlaceMap() {
                 .attr("cx", d => placePosition(d)[0])
                 .attr("cy", d => placePosition(d)[1])
                 .attr("r", 0)
-                .attr("fill", d => getYearColor(d.typicalYear)),
+                .attr("fill", PLACE_COLOR),
             update => update,
             exit => exit.transition("size").duration(transitionTime())
                 .attr("r", 0)
@@ -569,7 +575,7 @@ function updatePlaceMap() {
             .style("transform", "scale(" + getDotScale() + ")")
         .transition("size").duration(transitionTime())
             .attr("r", d => placeRadius(d.deaths))
-            .attr("fill", d => getYearColor(d.typicalYear));
+            .attr("fill", PLACE_COLOR);
 
     updatePlaceLegend(places);
     updateCaption(list, places);
@@ -583,13 +589,6 @@ function updatePlaceLegend(places) {
     legend.append("span").append("text").text("dot area = deaths" + (selectedState !== null ? " (dots grow with the zoom)" : "") + (biggest
         ? " (biggest here: " + biggest.place + ", " + formatNumber(biggest.deaths) + ")"
         : ""));
-
-    if ( startYear !== endYear ) {
-        let years = legend.append("span");
-        years.append("text").text(startYear);
-        YEAR_COLORS.forEach(c => years.append("i").style("background", c));
-        years.append("text").text(endYear + " (typical year of the place)");
-    }
 }
 
 function updateCaption(list, places) {
@@ -598,10 +597,11 @@ function updateCaption(list, places) {
     let title = "Add groups to the graph with the search box (or Add all) to see where they fought. Click a state on the map to zoom into it.";
     let numbers = "";
 
-    if ( graphGroups.length > 0 ) {
-        title = graphGroups.length === 1 ? "Add another group to see the conflicts between them"
-            : "Conflicts between " + (graphGroups.length <= 4 ? graphGroups.map(shortName).join(", ")
-                : formatNumber(graphGroups.length) + " groups") + where;
+    if ( graphGroups.length === 1 ) {
+        title = "Add another group to see the conflicts between them";
+    } else if ( graphGroups.length > 1 ) {
+        title = "Conflicts between " + (graphGroups.length <= 4 ? graphGroups.map(shortName).join(", ")
+            : formatNumber(graphGroups.length) + " groups") + where;
     } else if ( stateName !== null ) {
         title = "Add groups to the graph to see where they fought in " + stateName;
     }
@@ -1019,6 +1019,7 @@ function setupVis() {
         getScope: () => selectedState === null ? "" : getStateName(selectedState),
         shortName: shortName
     });
+
     zoomMap();
 
     // starts with nothing selected, in all the years
