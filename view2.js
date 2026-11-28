@@ -13,6 +13,7 @@ let NET_WIDTH = 640,
 // people who asked their system for less motion get the changes instantly
 import { enableTrackClick } from "./slider.js";
 import { createCompare } from "./compare.js";
+import { createRivals } from "./rivals.js";
 
 // every view looks for its elements inside its own part of the page
 let root = d3.select("#view2");
@@ -56,8 +57,9 @@ let events = [],
 // when the filters remove it and bring it back
 let nodeById = new Map();
 
-// the chart under the slider (see compare.js)
-let compare = null;
+// the chart under the slider (see compare.js) and the list of rivals of a group (see rivals.js)
+let compare = null,
+    rivals = null;
 
 let simulation,
     linkLayer,
@@ -623,6 +625,10 @@ function updateAll() {
     if ( compare !== null ) {
         compare.update();
     }
+
+    if ( rivals !== null ) {
+        rivals.update();
+    }
 }
 
 
@@ -691,10 +697,21 @@ function graphChanged(top, keepYears) {
 }
 
 function addGroup(name) {
+    // the list of rivals follows the last group added
+    if ( rivals !== null ) {
+        rivals.setGroup(name);
+    }
+
     if ( !graphGroups.includes(name) ) {
         graphGroups = [ ...graphGroups, name ];
         graphChanged(false, false);
     }
+}
+
+// a rival of the list was clicked: both groups go to the graph
+function addGroups(first, second) {
+    graphGroups = [ ...graphGroups, ...[ first, second ].filter((name, i, list) => !graphGroups.includes(name) && list.indexOf(name) === i) ];
+    graphChanged(false, false);
 }
 
 // clicking a node takes it out of the graph
@@ -979,6 +996,16 @@ function setupVis() {
     drawPlaceMap();
     setupControls();
     setupSearch();
+
+    // who a group fought, in the years of the slider
+    rivals = createRivals(root, {
+        getTypeEvents: getTypeEvents,
+        getVisibleEvents: getVisibleEvents,
+        getGraphGroups: () => graphGroups,
+        onPick: addGroups,
+        shortName: shortName,
+        formatNumber: formatNumber
+    });
 
     // the chart under the slider: the groups, the events of the checked types in the zoomed state,
     // and the years of the slider (what the rest of the view uses)

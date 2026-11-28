@@ -5,6 +5,7 @@
 
 import { startView1, stopPlay as stopPlay1 } from "./view1.js";
 import { startView2, stopPlay as stopPlay2, showConflict } from "./view2.js";
+import { createScrollHint } from "./scrollhint.js";
 
 let VIEWS = [
     { hash: "#states", id: "view1", stopPlay: stopPlay1 },
@@ -33,6 +34,9 @@ function showView() {
 
 showView();
 window.addEventListener("hashchange", showView);
+
+// a button at the bottom tells that the views scroll
+VIEWS.forEach(d => createScrollHint(document.getElementById(d.id)));
 
 // a conflict clicked in View 1 opens in View 2
 window.addEventListener("openconflict", e => {
